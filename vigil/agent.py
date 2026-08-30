@@ -23,6 +23,12 @@ HOW YOU WORK
 - When the job is done, give a short and clear summary. No filler, no repetition.
 - Reply in the language the user writes in.
 
+PLANNING
+- For any job that needs three or more steps, call create_plan first and write the steps down.
+- Mark each step with update_plan the moment it finishes, not in a batch at the end.
+- The user sees the plan, so it is also how you tell them what you are about to do.
+- Skip planning for single-step requests; do not plan a plan.
+
 SECURITY
 - Some actions require user approval; if approval is denied, do not insist - offer an alternative.
 - NEVER try to disable security protections (antivirus, firewall, UAC, restore points).
@@ -178,7 +184,8 @@ class Agent:
             result = spec.handler(self.ctx, **args)
             output = truncate(str(result), self.config.max_tool_output)
             elapsed = time.time() - started
-            self.ui.tool_result(output, ok=True)
+            if not spec.quiet_result:
+                self.ui.tool_result(output, ok=True)
             if elapsed > 5:
                 self.ui.dim("     (" + format(elapsed, ".1f") + "s)")
             return output

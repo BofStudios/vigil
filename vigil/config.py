@@ -45,6 +45,7 @@ class Config:
     enable_browser: bool = True
     enable_system: bool = True
     enable_memory: bool = True
+    enable_planner: bool = True
     enable_plugins: bool = True
     ollama_host: str = DEFAULT_OLLAMA_HOST
     ollama_model: str = DEFAULT_OLLAMA_MODEL

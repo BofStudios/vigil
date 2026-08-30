@@ -11,7 +11,7 @@ user
    |         \
    |          ui.py ......... terminal output, approval dialogs
    |
-  tools/ ............ tools (file, terminal, system, screen, browser, memory)
+  tools/ ............ tools (file, terminal, system, screen, browser, memory, planning)
    |         \
    |          memory.py ..... persistent notes (global + project)
    |
@@ -56,6 +56,10 @@ the `provider` config field. The Ollama provider uses only the standard library.
 code has the same privileges as the user, but its tools still pass through the Guard, so the risk
 policy still applies. A broken plugin never stops the program; it is recorded in `skipped`.
 
+**The plan is state, not prose.** `tools/planner.py` keeps the checklist in the session state and
+draws it itself; those tools set `quiet_result` so the agent does not echo the same text twice. The
+model is told to plan anything with three or more steps, which keeps long jobs from drifting.
+
 **Memory is injected into the system prompt.** `memory.as_prompt()` merges global and
 project-scoped notes into the system prompt, keeping the newest ones when the character cap is hit.
 
@@ -73,6 +77,7 @@ when their dependencies are missing; `Registry.load_module` skips them and recor
 | `vigil/security.py` | risk rules, `Guard`, audit log |
 | `vigil/config.py` | `~/.vigil/config.json`, environment variables, `.env` |
 | `vigil/memory.py` | persistent memory: global and project notes |
+| `vigil/tools/planner.py` | task checklist kept in session state |
 | `vigil/templates.py` | plugin scaffold template |
 | `vigil/providers/base.py` | provider interface, message types |
 | `vigil/providers/groq_provider.py` | Groq connection, streaming, vision, model list |

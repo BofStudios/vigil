@@ -51,6 +51,7 @@ no subscription.
 | **Free** | Groq's free tier is enough, and the key takes 30 seconds to get. Or stay entirely offline with Ollama. |
 | **Safe** | Every risky step is put to you for approval. Some actions never run, in any mode. |
 | **Transparent** | You see each step as it happens, and every decision is written to an audit log. |
+| **It plans** | Multi-step jobs get a visible checklist, ticked off as the work happens. |
 | **It remembers** | Persistent memory carries your preferences and project facts across sessions. |
 | **Extensible** | Drop a Python file into the plugin folder and its tools load on the next run. |
 
@@ -186,7 +187,7 @@ warning automatically.
 
 ## Tools
 
-41 tools across 6 groups:
+44 tools across 7 groups:
 
 | Group | Tools |
 |---|---|
@@ -196,6 +197,7 @@ warning automatically.
 | **screen** | `screen_capture`, `screen_size`, `mouse_click`, `mouse_move`, `mouse_scroll`, `keyboard_type`, `press_keys`, `list_windows`, `focus_window`, `clipboard` |
 | **browser** | `browser_open`, `browser_read`, `browser_click`, `browser_type`, `browser_screenshot`, `browser_back`, `browser_close` |
 | **memory** | `remember`, `recall`, `forget` |
+| **planning** | `create_plan`, `update_plan`, `show_plan` |
 
 Groups whose dependencies are missing switch themselves off — Vigil keeps working with the rest.
 
@@ -233,6 +235,37 @@ vigil config set provider ollama
 Vigil keeps the main model and the vision model separate: a screenshot goes to a vision-capable
 model and the main model receives a **text description**. That way tool calling and image
 support never clash.
+
+---
+
+## Task planning
+
+Long jobs are where agents drift — they forget a step, redo one, or stop early. For anything with
+three or more steps Vigil writes the plan down first and ticks it off as it goes, so you can watch
+the work happen:
+
+```
+vigil > set up a small python project here and check that it runs
+
+  * create_plan  plan: 3 steps
+  ! write_file   write: main.py
+  * update_plan  step 1 -> done
+  ! write_file   write: README.md
+  ! run_command  python main.py
+  * update_plan  step 3 -> done
+
+┌──────────────── plan · 3/3 done ─────────────────┐
+│   [x] Create main.py with a greeting  main.py created
+│   [x] Create README.md describing it  README.md created
+│   [x] Run main.py and check the output  ran, output captured
+└──────────────────────────────────────────────────┘
+```
+
+Steps carry a status of `todo`, `doing`, `done` or `blocked`, and a blocked step keeps its reason
+next to it — so when something cannot be finished you can see exactly where it stopped and why.
+
+The plan lives in the session only and is never written to disk. Turn it off with
+`vigil config set enable_planner false`.
 
 ---
 
@@ -307,6 +340,7 @@ Settings live in `~/.vigil/config.json`.
 | `max_tool_output` | `12000` | character cap on tool output |
 | `enable_gui` · `enable_browser` | `true` | toggle tool groups |
 | `enable_memory` · `enable_plugins` | `true` | memory and plugin systems |
+| `enable_planner` | `true` | task checklist for multi-step jobs |
 | `protect_paths` | `[]` | extra paths to protect |
 | `stream` | `true` | stream the answer as it is written |
 
@@ -339,7 +373,7 @@ vigil config set protect_paths "C:/Users/Pc/Private,D:/Backup"
 ```bash
 pip install -e ".[all,dev]"
 ruff check .
-pytest -q          # 107 tests
+pytest -q          # 124 tests
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the design,
@@ -356,7 +390,7 @@ See [docs/architecture.md](docs/architecture.md) for the design,
 - [x] Ollama support (fully local)
 - [x] Plugin system (`~/.vigil/plugins/`)
 - [x] Persistent memory (global + project)
-- [ ] Task planner: breaking long jobs into sub-steps
+- [x] Task planner: a visible checklist for multi-step jobs
 - [ ] Scheduled tasks (`vigil schedule`)
 - [ ] More providers: Gemini, OpenRouter
 - [ ] Optional web interface

@@ -32,6 +32,7 @@ class ToolSpec:
     risk: Risk = Risk.MODERATE
     risk_fn: Optional[Callable[[dict], Risk]] = None
     preview: Optional[Callable[[dict], str]] = None
+    quiet_result: bool = False  # the tool draws its own output; skip the echo
 
     def risk_for(self, args: dict) -> Risk:
         if self.risk_fn is not None:
@@ -177,6 +178,8 @@ def build_registry(config) -> Registry:
     registry = Registry()
     registry.load_module(".files")
     registry.load_module(".shell")
+    if getattr(config, "enable_planner", True):
+        registry.load_module(".planner")
     if getattr(config, "enable_memory", True):
         registry.load_module(".memory_tools")
     if getattr(config, "enable_system", True):

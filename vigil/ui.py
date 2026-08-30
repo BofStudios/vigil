@@ -121,6 +121,28 @@ class UI:
         if len(lines) > max_lines:
             self.console.print(Text("     ... (" + str(len(lines) - max_lines) + " more lines)", style="dim"))
 
+    # --------------------------------------------------------------- planning
+    PLAN_STYLE = {"todo": "dim", "doing": "bold cyan", "done": "green", "blocked": "red"}
+
+    def plan(self, steps: list) -> None:
+        """Render the task checklist so the user can follow along."""
+        if self.quiet or not steps:
+            return
+        body = Text()
+        for index, step in enumerate(steps, 1):
+            status = step.get("status", "todo")
+            icon = {"todo": "[ ]", "doing": "[>]", "done": "[x]", "blocked": "[!]"}.get(status, "[ ]")
+            style = self.PLAN_STYLE.get(status, "dim")
+            body.append("  " + icon + " ", style=style)
+            body.append(step.get("text", ""), style=style if status != "done" else "dim")
+            if step.get("note"):
+                body.append("  " + _one_line(step["note"], 30), style="dim italic")
+            if index < len(steps):
+                body.append("\n")
+        done = sum(1 for step in steps if step.get("status") == "done")
+        title = "plan · " + str(done) + "/" + str(len(steps)) + " done"
+        self.console.print(Panel(body, title=title, border_style="cyan", padding=(0, 1)))
+
     # ------------------------------------------------------------ approvals
     def confirm(self, action: Action) -> str:
         """Ask the user for approval. Returns: yes | no | always"""
