@@ -96,9 +96,24 @@ def test_delete_needs_recursive_for_nonempty(ctx, tmp_path):
     assert not folder.exists()
 
 
-def test_write_to_system_path_is_blocked(ctx):
+@pytest.mark.parametrize(
+    "system_path",
+    [
+        "C:/Windows/System32/vigil_test.txt",
+        r"C:\Windows\System32\vigil_test.txt",
+        "/etc/vigil_test.conf",
+        "/usr/bin/vigil_test",
+    ],
+)
+def test_write_to_system_path_is_blocked(ctx, system_path):
+    """Foreign-style system paths must be blocked on every platform.
+
+    A path like "C:/Windows/..." is relative on Linux (and "/etc/..." is
+    drive-less on Windows), so resolving it first would turn it into a harmless
+    path under the cwd. The guard checks the raw path too.
+    """
     with pytest.raises(PermissionDenied):
-        file_tools.write_file(ctx, "C:/Windows/System32/vigil_test.txt", "x")
+        file_tools.write_file(ctx, system_path, "x")
 
 
 def test_reading_an_ssh_key_is_blocked(ctx, tmp_path):

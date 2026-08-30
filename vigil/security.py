@@ -340,8 +340,19 @@ class Guard:
         )
         return self.evaluate(action)
 
-    def check_path(self, tool: str, path: str, write: bool = False, detail: str = ""):
+    def check_path(self, tool: str, path: str, write: bool = False, detail: str = "", raw=None):
+        """Check a path. `raw` is the original, unresolved path the caller was given.
+
+        Resolving happens before the guard sees the path, so a foreign-style path
+        ("C:/Windows/..." on Linux, "/etc/passwd" on Windows) would otherwise be
+        turned into a harmless relative path and slip through. Both forms are checked
+        and the worse verdict wins.
+        """
         verdict = classify_path(path, write=write)
+        if raw is not None and str(raw) != str(path):
+            alternative = classify_path(raw, write=write)
+            if alternative.risk > verdict.risk:
+                verdict = alternative
         if verdict.risk is not Risk.BLOCKED and self.extra_protected:
             try:
                 normalized = str(Path(path).expanduser().resolve()).replace("\\", "/").lower()

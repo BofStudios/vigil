@@ -23,9 +23,11 @@ BINARY_SUFFIXES = {
 }
 
 
-def _require(ctx: ToolContext, tool: str, path, write: bool = False, detail: str = "") -> Path:
+def _require(ctx: ToolContext, tool: str, path, write: bool = False, detail: str = "", raw=None) -> Path:
     resolved = ctx.resolve(str(path))
-    allowed, reason = ctx.guard.check_path(tool, str(resolved), write=write, detail=detail)
+    allowed, reason = ctx.guard.check_path(
+        tool, str(resolved), write=write, detail=detail, raw=str(raw if raw is not None else path)
+    )
     if not allowed:
         raise PermissionDenied(reason)
     return resolved
@@ -81,7 +83,7 @@ def write_file(ctx: ToolContext, path: str, content: str) -> str:
     else:
         detail = _preview_block(content)
 
-    target = _require(ctx, "write_file", target, write=True, detail=detail)
+    target = _require(ctx, "write_file", target, write=True, detail=detail, raw=path)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
@@ -108,7 +110,7 @@ def edit_file(ctx: ToolContext, path: str, old_text: str, new_text: str, replace
 
     updated = original.replace(old_text, new_text) if replace_all else original.replace(old_text, new_text, 1)
     detail = _diff_preview(original, updated)
-    target = _require(ctx, "edit_file", target, write=True, detail=detail)
+    target = _require(ctx, "edit_file", target, write=True, detail=detail, raw=path)
     try:
         target.write_text(updated, encoding="utf-8")
     except OSError as exc:
@@ -266,7 +268,7 @@ def delete_path(ctx: ToolContext, path: str, recursive: bool = False) -> str:
     if not allowed:
         raise PermissionDenied(reason)
     # The system-directory check still applies after approval.
-    _require(ctx, "delete_path", target, write=True)
+    _require(ctx, "delete_path", target, write=True, raw=path)
 
     try:
         if target.is_dir():
