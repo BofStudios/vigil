@@ -5,6 +5,8 @@ Vigil is four layers deep. Each layer knows the one below it and nothing above i
 ```
 user
    |
+   +-- desktop/ ...... pywebview window, web front end, one session per tab
+   |
   cli.py ............ arguments, REPL, slash commands
    |
   agent.py .......... model loop, conversation history, tool dispatch
@@ -56,6 +58,11 @@ the `provider` config field. The Ollama provider uses only the standard library.
 code has the same privileges as the user, but its tools still pass through the Guard, so the risk
 policy still applies. A broken plugin never stops the program; it is recorded in `skipped`.
 
+**The desktop app reuses the agent, it does not fork it.** `desktop/session.py` provides a UI
+adapter with the same surface the terminal UI has, turning every call into a JSON event for the
+front end. Approvals block the worker thread on an Event until the window answers, which is exactly
+what the terminal does with a blocking prompt.
+
 **The plan is state, not prose.** `tools/planner.py` keeps the checklist in the session state and
 draws it itself; those tools set `quiet_result` so the agent does not echo the same text twice. The
 model is told to plan anything with three or more steps, which keeps long jobs from drifting.
@@ -78,6 +85,9 @@ when their dependencies are missing; `Registry.load_module` skips them and recor
 | `vigil/config.py` | `~/.vigil/config.json`, environment variables, `.env` |
 | `vigil/memory.py` | persistent memory: global and project notes |
 | `vigil/tools/planner.py` | task checklist kept in session state |
+| `vigil/desktop/app.py` | window bootstrap and the JS-callable bridge |
+| `vigil/desktop/session.py` | per-tab agent plus the event-emitting UI adapter |
+| `vigil/desktop/web/` | the front end: one HTML, one CSS, one JS file |
 | `vigil/templates.py` | plugin scaffold template |
 | `vigil/providers/base.py` | provider interface, message types |
 | `vigil/providers/groq_provider.py` | Groq connection, streaming, vision, model list |

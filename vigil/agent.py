@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import platform
+import threading
 import time
 from pathlib import Path
 
@@ -71,6 +72,7 @@ class Agent:
         self.tool_schemas = to_openai_tools(registry.specs())
         self.steps_used = 0
         self.interrupted = False
+        self._stop = threading.Event()
 
     # ------------------------------------------------------------- system
     def _system_prompt(self) -> str:
@@ -99,6 +101,18 @@ class Agent:
             memory=notes,
         )
 
+    def request_stop(self) -> None:
+        """Ask the run to wind down. Checked between steps and between tool calls.
+
+        The terminal front end interrupts with Ctrl+C; a graphical one has no signal
+        to send, so it flips this flag instead.
+        """
+        self._stop.set()
+
+    @property
+    def stop_requested(self) -> bool:
+        return self._stop.is_set()
+
     def refresh_system_prompt(self) -> None:
         self.messages[0] = {"role": "system", "content": self._system_prompt()}
 
@@ -107,9 +121,15 @@ class Agent:
         """Handle a user message, run the necessary tools, return the final answer."""
         self.messages.append({"role": "user", "content": user_input})
         self.interrupted = False
+        self._stop.clear()
         final_text = ""
 
         for step in range(self.config.max_steps):
+            if self._stop.is_set():
+                self.interrupted = True
+                self.ui.end_stream()
+                self.ui.warn("stopped by the user.")
+                return final_text
             self.steps_used = step + 1
             self._trim()
 
@@ -141,6 +161,12 @@ class Agent:
                 self.ui.dim("  " + message.content.strip()[:400])
 
             for call in message.tool_calls:
+                if self._stop.is_set():
+                    self.interrupted = True
+                    self.messages.append(
+                        tool_result_message(call.id, call.name, "The user stopped the run.")
+                    )
+                    continue
                 try:
                     result = self._execute(call)
                 except KeyboardInterrupt:

@@ -30,7 +30,7 @@ from .tools import build_registry
 from .ui import UI
 
 SUBCOMMANDS = {"setup", "config", "models", "tools", "doctor", "audit", "chat",
-               "memory", "plugins", "version", "help"}
+               "memory", "plugins", "app", "version", "help"}
 
 SLASH_HELP = [
     ("/help", "show this help"),
@@ -374,6 +374,32 @@ def cmd_plugins(args, config: Config, ui: UI) -> int:
     return 0
 
 
+
+# -------------------------------------------------------------------- app
+def cmd_app(args, config: Config, ui: UI) -> int:
+    """Open the desktop window."""
+    if getattr(args, "install_shortcut", False):
+        from .desktop import shortcut
+
+        try:
+            path = shortcut.create()
+        except OSError as exc:
+            ui.error(str(exc))
+            return 1
+        ui.success("Shortcut created: " + str(path))
+        return 0
+
+    if not _require_key(config, ui):
+        return 1
+    try:
+        from .desktop.app import run
+    except ImportError as exc:
+        ui.error("The desktop app needs pywebview: pip install \"vigil-cli[desktop]\"")
+        ui.dim(str(exc))
+        return 1
+    return run(config, debug=getattr(args, "debug", False))
+
+
 # ------------------------------------------------------------------- chat
 def cmd_chat(args, config: Config, ui: UI) -> int:
     if not _require_key(config, ui):
@@ -667,6 +693,11 @@ def build_parser() -> argparse.ArgumentParser:
     plugins_parser.add_argument("action", nargs="?", default="list", choices=["list", "new"])
     plugins_parser.add_argument("value", nargs="?", help="plugin name for `new`")
 
+    app_parser = subparsers.add_parser("app", help="open the desktop app")
+    app_parser.add_argument("--install-shortcut", action="store_true",
+                            help="put a Vigil shortcut on the desktop and exit")
+    app_parser.add_argument("--debug", action="store_true", help="open the web inspector")
+
     chat_parser = subparsers.add_parser("chat", help="chat (default)")
     chat_parser.add_argument("prompt", nargs="*")
 
@@ -726,6 +757,7 @@ def main(argv=None) -> int:
         "audit": cmd_audit,
         "memory": cmd_memory,
         "plugins": cmd_plugins,
+        "app": cmd_app,
         "chat": cmd_chat,
     }
 

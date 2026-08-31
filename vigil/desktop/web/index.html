@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vigil</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"></div>
+
+  <!-- ------------------------------------------------------------ chrome -->
+  <header class="titlebar">
+    <div class="brand drag-region">
+      <svg class="brand-mark" viewBox="0 0 256 256" aria-hidden="true">
+        <path d="M68 77 V141 L128 212 L188 141 V77 L128 51 Z" fill="none"
+              stroke="currentColor" stroke-width="15" stroke-linejoin="round"/>
+        <circle cx="128" cy="119" r="15" fill="currentColor"/>
+      </svg>
+      <span class="brand-name">Vigil</span>
+    </div>
+
+    <nav class="tabs" id="tabs"></nav>
+
+    <button class="tab-add" id="new-tab" title="New session (Ctrl+T)" aria-label="New session">
+      <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6"
+        stroke-linecap="round" fill="none"/></svg>
+    </button>
+
+    <div class="drag-region drag-fill"></div>
+
+    <div class="window-controls">
+      <button id="win-min" aria-label="Minimize"><svg viewBox="0 0 12 12"><path d="M2 6h8"
+        stroke="currentColor" stroke-width="1.2"/></svg></button>
+      <button id="win-max" aria-label="Maximize"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5"
+        width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+      <button id="win-close" class="danger" aria-label="Close"><svg viewBox="0 0 12 12">
+        <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.2"
+        stroke-linecap="round"/></svg></button>
+    </div>
+  </header>
+
+  <!-- -------------------------------------------------------------- body -->
+  <main class="stage">
+    <div class="stream" id="stream">
+      <section class="welcome" id="welcome">
+        <svg class="welcome-mark" viewBox="0 0 256 256" aria-hidden="true">
+          <path d="M68 77 V141 L128 212 L188 141 V77 L128 51 Z" fill="none"
+                stroke="currentColor" stroke-width="12" stroke-linejoin="round"/>
+          <circle cx="128" cy="119" r="14" fill="currentColor"/>
+        </svg>
+        <h1>What should I take care of?</h1>
+        <p class="welcome-sub">
+          I can run commands, work with your files, read your screen and drive a browser.
+          Risky steps stop and ask you first.
+        </p>
+        <div class="suggestions" id="suggestions">
+          <button data-prompt="Summarise what is in this folder and flag anything unusual.">
+            <span class="suggestion-icon">📁</span> Summarise this folder
+          </button>
+          <button data-prompt="Which processes are using the most memory right now, and should I be worried about any of them?">
+            <span class="suggestion-icon">📊</span> What is eating my memory?
+          </button>
+          <button data-prompt="Find every file larger than 100 MB under this folder and show me the biggest ones.">
+            <span class="suggestion-icon">🔍</span> Find the big files
+          </button>
+          <button data-prompt="Check my disk space and tell me what I could safely clear.">
+            <span class="suggestion-icon">🧹</span> Free up disk space
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- plan rail -->
+    <aside class="plan-rail" id="plan-rail" hidden>
+      <div class="plan-head">
+        <span class="plan-title">Plan</span>
+        <span class="plan-count" id="plan-count">0/0</span>
+        <button class="plan-hide" id="plan-hide" aria-label="Hide plan">
+          <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor"
+            stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="plan-progress"><i id="plan-bar"></i></div>
+      <ol class="plan-steps" id="plan-steps"></ol>
+    </aside>
+  </main>
+
+  <!-- ------------------------------------------------------------- input -->
+  <footer class="composer">
+    <div class="composer-box" id="composer-box">
+      <textarea id="input" rows="1" placeholder="Ask Vigil to do something…"
+                spellcheck="false" autocomplete="off"></textarea>
+      <button class="send" id="send" aria-label="Send">
+        <svg viewBox="0 0 20 20"><path d="M3 10l14-6-6 14-2-6-6-2z" fill="currentColor"/></svg>
+      </button>
+      <button class="stop" id="stop" hidden aria-label="Stop">
+        <svg viewBox="0 0 20 20"><rect x="6" y="6" width="8" height="8" rx="1.5" fill="currentColor"/></svg>
+      </button>
+    </div>
+
+    <div class="statusbar">
+      <button class="chip" id="chip-mode" title="Approval mode — click to cycle">
+        <i class="dot"></i><span id="mode-label">ask</span>
+      </button>
+      <button class="chip" id="chip-model" title="Model — click to change">
+        <span id="model-label">—</span>
+      </button>
+      <button class="chip chip-path" id="chip-cwd" title="Working directory — click to change">
+        <svg viewBox="0 0 16 16" class="chip-icon"><path d="M2 4.5A1.5 1.5 0 013.5 3h2.6l1.2 1.5h5.2
+          A1.5 1.5 0 0114 6v5.5A1.5 1.5 0 0112.5 13h-9A1.5 1.5 0 012 11.5z" fill="none"
+          stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+        <span id="cwd-label">—</span>
+      </button>
+      <div class="status-spacer"></div>
+      <span class="chip ghost" id="chip-tokens" hidden></span>
+      <button class="chip ghost" id="chip-tools" title="Show the tools Vigil can use">
+        <span id="tools-label">— tools</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- ------------------------------------------------------------ modals -->
+  <div class="overlay" id="overlay" hidden>
+    <div class="approval" id="approval" role="dialog" aria-modal="true">
+      <div class="approval-head">
+        <span class="risk-badge" id="approval-risk">moderate</span>
+        <span class="approval-tool" id="approval-tool">run_command</span>
+      </div>
+      <p class="approval-summary" id="approval-summary"></p>
+      <p class="approval-reason" id="approval-reason"></p>
+      <pre class="approval-detail" id="approval-detail"></pre>
+      <div class="approval-actions">
+        <button class="btn btn-yes" id="btn-yes"><kbd>Y</kbd> Allow</button>
+        <button class="btn btn-no" id="btn-no"><kbd>N</kbd> Deny</button>
+        <button class="btn btn-always" id="btn-always"><kbd>A</kbd> Always this session</button>
+      </div>
+    </div>
+
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true" hidden>
+      <div class="sheet-head">
+        <span id="sheet-title">Models</span>
+        <button class="sheet-close" id="sheet-close" aria-label="Close">
+          <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor"
+            stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body" id="sheet-body"></div>
+    </div>
+  </div>
+
+  <div class="toast-rail" id="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
