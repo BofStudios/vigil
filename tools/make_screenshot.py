@@ -1,7 +1,8 @@
-"""Render a screenshot of the desktop UI for the README.
+"""Render screenshots of the bar for the README.
 
 The page is the real front end; only the Python bridge is stubbed, so what you
-see is what the app draws. Run after changing the UI:
+see is what the app draws. The desktop wallpaper behind the real window shows
+through the acrylic - here it is faked with a gradient so the glass reads.
 
     python tools/make_screenshot.py
 """
@@ -15,32 +16,42 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "vigil" / "desktop" / "web"
-OUT = ROOT / "docs" / "screenshot.png"
-OUT_APPROVAL = ROOT / "docs" / "approval.png"
+DOCS = ROOT / "docs"
 PORT = 8911
+
+BAR_WIDTH = 720
+BAR_HEIGHT = 68
+PANEL_HEIGHT = 620
 
 MOCK = """
 (() => {
   const send = (p) => setTimeout(() => window.vigil.receive(p), p._at || 0);
   window.pywebview = { api: {
     ready: async () => ({
-      version: "0.3.0", provider: "groq", model: "openai/gpt-oss-120b", mode: "ask", warning: "",
-      tabs: [
-        { id: "tab-1", title: "Tidy up the downloads folder", cwd: "C:\\\\Users\\\\you\\\\Downloads", busy: true, tools: 44 },
-        { id: "tab-2", title: "Release notes", cwd: "C:\\\\Code\\\\vigil", busy: false, tools: 44 },
-      ],
+      version: "0.4.0", provider: "groq", model: "openai/gpt-oss-120b", mode: "ask",
+      warning: "", hotkey: true, tray: true,
+      tabs: [{ id: "tab-1", title: "Tidy the downloads folder",
+               cwd: "C:\\\\Users\\\\you\\\\Downloads", busy: false, tools: 44 }],
     }),
-    new_tab: async () => ({ id: "tab-3", title: "New session", cwd: "C:\\\\", tools: 44 }),
+    new_tab: async () => ({ id: "tab-2", title: "New session", cwd: "C:\\\\", tools: 44 }),
     close_tab: async () => ({ tabs: [] }), send: async () => ({ ok: true }),
     stop: async () => ({ ok: true }), answer: async () => ({ ok: true }),
     set_mode: async (m) => ({ mode: m }), set_model: async (m) => ({ model: m }),
     models: async () => ({ models: [] }), tools: async () => ({ groups: {} }),
-    pick_folder: async () => ({ cancelled: true }),
-    minimize(){}, toggle_maximize(){}, close(){},
+    pick_folder: async () => ({ cancelled: true }), notify_done() {},
+    expand() {}, collapse() {}, hide_window() {}, show_window() {},
   }};
+
   window.addEventListener("load", () => setTimeout(() => {
+    if (location.search.includes("bar")) {
+      document.getElementById("input").value = "sort my screenshots by month";
+      document.getElementById("input").dispatchEvent(new Event("input"));
+      return;
+    }
+
+    document.getElementById("shell").classList.add("expanded");
     const tab = "tab-1";
-    send({ tab, type: "user", text: "Tidy up my downloads folder and tell me what is safe to delete." });
+    send({ tab, type: "user", text: "Tidy my downloads folder and tell me what is safe to delete." });
     send({ _at: 10, tab, type: "plan", steps: [
       { text: "List everything in Downloads with sizes", status: "done", note: "142 files" },
       { text: "Group the installers into one folder", status: "done", note: "8 moved" },
@@ -53,15 +64,26 @@ MOCK = """
     send({ _at: 40, tab, type: "tool", name: "make_dir", summary: "mkdir: installers", risk: "moderate" });
     send({ _at: 50, tab, type: "tool_result", ok: true, text: "C:\\\\Users\\\\you\\\\Downloads\\\\installers is ready." });
     send({ _at: 60, tab, type: "assistant_full", text:
-      "Here is what I found in **Downloads**:\\n\\n- 142 files, **1.9 GB** total\\n- I moved 8 installers into `installers/`\\n- Two files dominate the folder:\\n\\n```\\narchive.zip     212 MB\\nold_backup.7z   1.4 GB\\n```\\n\\n`old_backup.7z` has not been touched since March. Want me to delete it?" });
+      "Here is what I found in **Downloads**:\\n\\n- 142 files, **1.9 GB** total\\n- I moved 8 installers into `installers/`\\n- `old_backup.7z` alone is **1.4 GB** and has not been touched since March\\n\\nWant me to delete it?" });
+
     if (location.search.includes("approval")) {
-      send({ _at: 80, tab, type: "approval", request: "req-1", tool: "delete_path",
+      send({ _at: 90, tab, type: "approval", request: "req-1", tool: "delete_path",
         summary: "FILE TO DELETE: C:\\\\Users\\\\you\\\\Downloads\\\\old_backup.7z (1.4 GB)",
         reason: "permanent deletion", risk: "high",
         detail: "FILE TO DELETE: C:\\\\Users\\\\you\\\\Downloads\\\\old_backup.7z (1.4 GB)\\nLast modified: 2026-03-11" });
     }
   }, 120));
 })();
+"""
+
+# The real window floats over the desktop; this stands in for a wallpaper so the
+# acrylic has something to blur.
+BACKDROP = """
+html { background:
+  radial-gradient(60% 60% at 18% 12%, #1d3b57 0%, transparent 60%),
+  radial-gradient(50% 50% at 82% 8%, #3a2a52 0%, transparent 62%),
+  linear-gradient(160deg, #0f1420 0%, #131a26 55%, #0a0e16 100%) !important; }
+body { padding: 0 !important; }
 """
 
 
@@ -93,19 +115,33 @@ def main() -> None:
     server = socketserver.TCPServer(("127.0.0.1", PORT), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
+    shots = [
+        ("screenshot.png", "", PANEL_HEIGHT),
+        ("approval.png", "?approval=1", PANEL_HEIGHT),
+        ("bar.png", "?bar=1", BAR_HEIGHT),
+    ]
+
     try:
-        OUT.parent.mkdir(parents=True, exist_ok=True)
+        DOCS.mkdir(parents=True, exist_ok=True)
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
-            page = browser.new_context(
-                viewport={"width": 1180, "height": 760}, device_scale_factor=2
-            ).new_page()
+            browser = playwright.chromium.launch(args=["--force-color-profile=srgb"])
             base = "http://127.0.0.1:" + str(PORT) + "/__preview.html"
-            for path, query in ((OUT, ""), (OUT_APPROVAL, "?approval=1")):
+            for name, query, height in shots:
+                page = browser.new_context(
+                    viewport={"width": BAR_WIDTH + 80, "height": height + 60},
+                    device_scale_factor=2,
+                ).new_page()
                 page.goto(base + query)
-                page.wait_for_timeout(1400)
-                page.screenshot(path=str(path))
-                print("wrote", path)
+                page.add_style_tag(content=BACKDROP)
+                # centre the shell in the padded viewport so the shadow is visible
+                page.add_style_tag(content=(
+                    "body{display:grid;place-items:center;height:100vh}"
+                    ".shell{width:" + str(BAR_WIDTH) + "px;height:" + str(height) + "px}"
+                ))
+                page.wait_for_timeout(1300)
+                page.screenshot(path=str(DOCS / name))
+                print("wrote", DOCS / name)
+                page.close()
             browser.close()
     finally:
         server.shutdown()

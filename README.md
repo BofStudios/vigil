@@ -17,7 +17,7 @@
 
 *by [BOF Studios](https://github.com/BofStudios)*
 
-<img src="docs/screenshot.png" alt="The Vigil desktop app" width="820">
+<img src="docs/bar.png" alt="The Vigil bar" width="760">
 
 </div>
 
@@ -29,8 +29,8 @@ Vigil is an AI agent that runs on your machine. Tell it what you want in plain l
 does the work with **real tools**: reads and writes files, runs commands, inspects system state,
 looks at your screen, drives the mouse and keyboard, and controls a browser.
 
-It comes in two forms that share the same engine: a **desktop app** with tabs and a live plan,
-and a **terminal client** for when you are already in a shell.
+It comes in two forms that share the same engine: a **bar** that floats at the top of your
+screen and lives in the tray, and a **terminal client** for when you are already in a shell.
 
 ```
 vigil > collect every pdf on my desktop into a folder called "invoices"
@@ -53,7 +53,7 @@ no subscription.
 
 | | |
 |---|---|
-| **Two front ends** | A tabbed desktop app, or the terminal. Same agent, same rules, same audit log. |
+| **Always a keystroke away** | Ctrl+Shift+Space summons the bar over whatever you are doing. It runs from the tray. |
 | **Free** | Groq's free tier is enough, and the key takes 30 seconds to get. Or stay entirely offline with Ollama. |
 | **Safe** | Every risky step is put to you for approval. Some actions never run, in any mode. |
 | **Transparent** | You see each step as it happens, and every decision is written to an audit log. |
@@ -101,35 +101,39 @@ working directory.
 
 ---
 
-## The desktop app
+## The bar
 
 ```bash
-vigil app                      # open the window
+vigil app                      # open the bar
 vigil app --install-shortcut   # put Vigil on your desktop, with its icon
 ```
 
-A frameless window with tabs, built on the same agent as the terminal client. Each tab is an
-independent session with its own history and working directory, so you can leave a long job
-running in one tab and start something else in another.
+A pill at the top of the screen, always on top, made of real Windows acrylic — not a
+gradient pretending to be glass. Ask it something and it grows into a panel; press Escape
+and it shrinks back to one line.
 
-<img src="docs/approval.png" alt="An approval prompt in the desktop app" width="620">
+<img src="docs/screenshot.png" alt="The bar expanded, mid-task" width="760">
 
-- **Tabs** — `Ctrl+T` opens one, `Ctrl+W` closes it, `Ctrl+1…9` jumps between them
-- **Live plan** — the checklist fills in on the right as the work happens
-- **Approvals** — risky steps stop the run and wait; `Y` allows, `N` denies, `A` allows for the session
-- **Stop** — the send button becomes a stop button while Vigil is working
-- **Status bar** — click the chips to change approval mode, model or working directory
+- **Ctrl+Shift+Space** summons or dismisses it from anywhere
+- **Closing hides it to the tray** — a run may still be going, and it will notify you when it lands
+- **Live plan** fills in under the bar as the work happens
+- **Approvals** stop the run and wait, with `Y` allow, `N` deny, `A` allow for the session
+- **Tabs** appear once you have more than one session: `Ctrl+T`, `Ctrl+W`, `Ctrl+1…9`
+- **Chips** along the bottom change the model, working directory and approval mode
 
-The front end is plain HTML, CSS and JavaScript with no framework and no network access; the
-window is [pywebview](https://pywebview.flowrl.com/) over the system WebView (WebView2 on Windows,
-WebKit elsewhere).
+<img src="docs/approval.png" alt="An approval prompt" width="760">
+
+The front end is one HTML file, one CSS file and one JS file — no framework, no bundler, no
+network access. The window is [pywebview](https://pywebview.flowrl.com/) over the system
+WebView, with the glass applied through DWM (`vigil/desktop/native.py`). On Windows 10 or
+other platforms the native effects are skipped and the CSS carries the look.
 
 ---
 
 ## Usage
 
 ```bash
-vigil app                              # open the desktop app
+vigil app                              # open the bar
 vigil                                  # or start a terminal session
 vigil "clean up my downloads folder"   # one-shot command
 vigil doctor                           # check the install and connection
@@ -407,7 +411,7 @@ vigil config set protect_paths "C:/Users/Pc/Private,D:/Backup"
 ```bash
 pip install -e ".[all,dev]"
 ruff check .
-pytest -q          # 140 tests
+pytest -q          # 152 tests
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the design,
@@ -424,7 +428,7 @@ See [docs/architecture.md](docs/architecture.md) for the design,
 - [x] Ollama support (fully local)
 - [x] Plugin system (`~/.vigil/plugins/`)
 - [x] Persistent memory (global + project)
-- [x] Desktop app: tabs, live plan, approval dialogs
+- [x] Desktop bar: acrylic glass, global hot key, tray, live plan
 - [x] Task planner: a visible checklist for multi-step jobs
 - [ ] Scheduled tasks (`vigil schedule`)
 - [ ] More providers: Gemini, OpenRouter

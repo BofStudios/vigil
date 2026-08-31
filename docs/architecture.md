@@ -5,7 +5,7 @@ Vigil is four layers deep. Each layer knows the one below it and nothing above i
 ```
 user
    |
-   +-- desktop/ ...... pywebview window, web front end, one session per tab
+   +-- desktop/ ...... the bar: pywebview window, tray, hot key, one session per tab
    |
   cli.py ............ arguments, REPL, slash commands
    |
@@ -58,6 +58,14 @@ the `provider` config field. The Ollama provider uses only the standard library.
 code has the same privileges as the user, but its tools still pass through the Guard, so the risk
 policy still applies. A broken plugin never stops the program; it is recorded in `skipped`.
 
+**The glass is the compositor's, not CSS.** `desktop/native.py` asks DWM for an acrylic
+backdrop and rounded corners through ctypes. CSS cannot blur what is behind a window, so faking
+it was never an option; where the API is missing the calls no-op and the CSS fallback stands in.
+
+**The window size is set after it opens.** pywebview does not honour the height passed to
+`create_window` for a frameless window - it comes out at `min_size` - but `resize()` sets the
+viewport exactly, so `_polish_window` fits the bar once the window has settled.
+
 **The desktop app reuses the agent, it does not fork it.** `desktop/session.py` provides a UI
 adapter with the same surface the terminal UI has, turning every call into a JSON event for the
 front end. Approvals block the worker thread on an Event until the window answers, which is exactly
@@ -85,7 +93,9 @@ when their dependencies are missing; `Registry.load_module` skips them and recor
 | `vigil/config.py` | `~/.vigil/config.json`, environment variables, `.env` |
 | `vigil/memory.py` | persistent memory: global and project notes |
 | `vigil/tools/planner.py` | task checklist kept in session state |
-| `vigil/desktop/app.py` | window bootstrap and the JS-callable bridge |
+| `vigil/desktop/app.py` | the bar: window, geometry, and the JS-callable bridge |
+| `vigil/desktop/native.py` | Windows acrylic, rounded corners, global hot key |
+| `vigil/desktop/tray.py` | tray icon; closing hides rather than quits |
 | `vigil/desktop/session.py` | per-tab agent plus the event-emitting UI adapter |
 | `vigil/desktop/web/` | the front end: one HTML, one CSS, one JS file |
 | `vigil/templates.py` | plugin scaffold template |

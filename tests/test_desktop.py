@@ -201,3 +201,114 @@ def test_session_title_follows_the_first_message(config):
     session.busy = True  # stop send_message from actually starting a run
     session.send_message("this should not change the title while busy")
     assert session.title == "New session"
+
+
+# ------------------------------------------------------------ bar geometry
+def test_expand_and_collapse_track_state(config):
+    api = Api(config)
+    assert api.expanded is False
+
+    assert api.expand() == {"expanded": True}
+    assert api.expanded is True
+
+    # expanding twice is a no-op, not a second animation
+    assert api.expand() == {"expanded": True}
+
+    assert api.collapse() == {"expanded": False}
+    assert api.expanded is False
+
+
+def test_fit_without_a_window_fails_quietly(config):
+    assert Api(config).fit() == {"ok": False}
+
+
+def test_hide_and_show_track_visibility(config):
+    api = Api(config)
+    assert api.visible is True
+
+    assert api.hide_window() == {"visible": False}
+    assert api.visible is False
+
+    api.show_window()
+    assert api.visible is True
+
+
+def test_toggle_flips_visibility(config):
+    api = Api(config)
+    api.toggle_window()
+    assert api.visible is False
+    api.toggle_window()
+    assert api.visible is True
+
+
+def test_sending_a_message_expands_the_bar(config):
+    api = Api(config)
+    tab = api.new_tab()
+    # stub the run so the test does not reach for a model
+    api.sessions[tab["id"]].send_message = lambda text: None
+
+    assert api.send(tab["id"], "hello") == {"ok": True}
+    assert api.expanded is True
+
+
+def test_a_busy_tab_refuses_new_work(config):
+    api = Api(config)
+    tab = api.new_tab()
+    api.sessions[tab["id"]].busy = True
+
+    assert api.send(tab["id"], "hello") == {"error": "still working"}
+
+
+def test_state_reports_the_shell_features(config):
+    api = Api(config)
+    api.new_tab()
+    state = api.state()
+    assert state["hotkey"] is False   # no hot key registered in a test
+    assert state["tray"] is False
+    assert "version" in state
+
+
+# ----------------------------------------------------------------- native
+def test_native_capability_checks_do_not_raise():
+    from vigil.desktop import native
+
+    assert isinstance(native.supports_acrylic(), bool)
+    assert isinstance(native.supports_rounding(), bool)
+
+    width, height = native.screen_size()
+    assert width > 0 and height > 0
+
+
+def test_glass_on_a_missing_window_is_a_no_op():
+    from vigil.desktop import native
+
+    applied = native.apply_glass(None)
+    assert applied == {"dark": False, "rounded": False, "backdrop": False}
+    assert native.set_topmost(None) is False
+    native.flash_focus(None)  # must not raise
+
+
+def test_find_window_returns_none_for_nonsense():
+    from vigil.desktop import native
+
+    assert native.find_window("no window is called this 8f3a2b") is None
+
+
+# -------------------------------------------------------------------- tray
+def test_tray_reports_when_it_cannot_start(monkeypatch):
+    from vigil.desktop.tray import Tray
+
+    tray = Tray()
+    monkeypatch.setattr("vigil.desktop.tray.ICON_PNG", "does-not-exist.png")
+    assert tray.start() is False
+    assert tray.available is False
+    tray.notify("nothing should happen")  # must not raise
+    tray.stop()
+
+
+def test_tray_callbacks_are_optional():
+    from vigil.desktop.tray import Tray
+
+    tray = Tray()
+    tray._show()
+    tray._hide()  # defaults must be callable

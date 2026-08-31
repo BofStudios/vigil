@@ -1,4 +1,8 @@
-"""The Vigil desktop app: a frameless window driven by the same agent as the CLI.
+"""The Vigil bar: a floating pill at the top of the screen, backed by the agent.
+
+Collapsed it is a single input line. Ask it something and it grows into a panel
+with the conversation and the plan; press Escape and it shrinks back. Closing it
+hides it to the tray rather than quitting, because a run may still be going.
 
 Front end lives in web/ and talks to this module through `pywebview.api.*`.
 Python pushes events the other way with `window.evaluate_js`.
@@ -11,21 +15,25 @@ import json
 import queue
 import sys
 import threading
+import time
 from pathlib import Path
 
 from .. import __version__
 from ..config import Config, ensure_dirs
 from ..providers import ProviderError, build_provider, provider_notes
+from . import native
 from .session import Session
+from .tray import Tray
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 ICON = ASSETS_DIR / "vigil.ico"
 
-WINDOW_WIDTH = 1080
-WINDOW_HEIGHT = 720
-MIN_SIZE = (760, 520)
-BACKGROUND = "#0b0e14"
+WINDOW_TITLE = "Vigil"
+BAR_WIDTH = 720
+BAR_HEIGHT = 68
+PANEL_HEIGHT = 620
+TOP_MARGIN = 14
 
 _tab_ids = itertools.count(1)
 
@@ -40,28 +48,35 @@ def _js_literal(payload: dict) -> str:
     return text.replace(chr(0x2028), "\\u2028").replace(chr(0x2029), "\\u2029")
 
 
+def _ease_out(t: float) -> float:
+    return 1 - pow(1 - t, 3)
+
+
 class Api:
     """Everything the front end can call. Method names are the JS API surface."""
 
     def __init__(self, config: Config):
         self.config = config
         self.window = None
+        self.tray = None
+        self.hotkey = None
+        self.hwnd = None
         self.sessions: dict = {}
+        self.expanded = False
+        self.visible = True
         self._outbox: queue.Queue = queue.Queue()
         self._ready = threading.Event()
-        self._pump = None
+        self._resizing = threading.Lock()
 
     # ------------------------------------------------------------ plumbing
     def attach(self, window) -> None:
         self.window = window
-        self._pump = threading.Thread(target=self._drain, daemon=True)
-        self._pump.start()
+        threading.Thread(target=self._drain, daemon=True).start()
 
     def emit(self, payload: dict) -> None:
         self._outbox.put(payload)
 
     def _drain(self) -> None:
-        """Push events to the front end one at a time, once it says it is ready."""
         self._ready.wait()
         while True:
             payload = self._outbox.get()
@@ -70,8 +85,7 @@ class Api:
             try:
                 self.window.evaluate_js("window.vigil.receive(" + _js_literal(payload) + ")")
             except Exception:
-                # The window may be closing; dropping a UI event is not fatal.
-                pass
+                pass  # the window may be closing; a dropped UI event is not fatal
 
     # ------------------------------------------------------------ lifecycle
     def ready(self) -> dict:
@@ -88,8 +102,82 @@ class Api:
             "model": self.config.active_model,
             "mode": self.config.approval_mode,
             "warning": provider_notes(self.config),
+            "hotkey": bool(self.hotkey and self.hotkey.registered),
+            "tray": bool(self.tray and self.tray.available),
             "tabs": [session.describe() for session in self.sessions.values()],
         }
+
+    def fit(self) -> dict:
+        """Snap the window to the bar size.
+
+        The size passed to create_window is not honoured for a frameless window -
+        it comes out at min_size - but resize() sets the viewport exactly, so one
+        call after boot puts things right.
+        """
+        target = PANEL_HEIGHT if self.expanded else BAR_HEIGHT
+        try:
+            self.window.resize(BAR_WIDTH, target)
+        except Exception:
+            return {"ok": False}
+        return {"ok": True, "height": target}
+
+    # --------------------------------------------------------------- window
+    def _animate_height(self, target: int, duration: float = 0.16) -> None:
+        """Grow or shrink the window. Stepping it reads as motion rather than a jump."""
+        if self.window is None:
+            return
+        with self._resizing:
+            try:
+                start = int(self.window.height)
+            except Exception:
+                start = BAR_HEIGHT
+            if start == target:
+                return
+            steps = 12
+            for index in range(1, steps + 1):
+                height = round(start + (target - start) * _ease_out(index / steps))
+                try:
+                    self.window.resize(BAR_WIDTH, height)
+                except Exception:
+                    return
+                time.sleep(duration / steps)
+
+    def expand(self) -> dict:
+        if not self.expanded:
+            self.expanded = True
+            threading.Thread(target=self._animate_height, args=(PANEL_HEIGHT,), daemon=True).start()
+        return {"expanded": True}
+
+    def collapse(self) -> dict:
+        if self.expanded:
+            self.expanded = False
+            threading.Thread(target=self._animate_height, args=(BAR_HEIGHT,), daemon=True).start()
+        return {"expanded": False}
+
+    def hide_window(self) -> dict:
+        """Tuck the bar away. The agent keeps running; the tray brings it back."""
+        self.visible = False
+        try:
+            self.window.hide()
+        except Exception:
+            pass
+        return {"visible": False}
+
+    def show_window(self) -> dict:
+        self.visible = True
+        try:
+            self.window.show()
+        except Exception:
+            pass
+        native.flash_focus(self.hwnd)
+        self.emit({"type": "focus", "tab": self._first_tab()})
+        return {"visible": True}
+
+    def toggle_window(self) -> None:
+        self.hide_window() if self.visible else self.show_window()
+
+    def _first_tab(self) -> str:
+        return next(iter(self.sessions), "")
 
     # ----------------------------------------------------------------- tabs
     def new_tab(self, cwd: str = "") -> dict:
@@ -123,6 +211,7 @@ class Api:
             return {"error": "no such tab"}
         if session.busy:
             return {"error": "still working"}
+        self.expand()
         session.send_message(text)
         return {"ok": True}
 
@@ -137,6 +226,11 @@ class Api:
         if session is None:
             return {"error": "no such tab"}
         return {"ok": session.ui.answer(request_id, value)}
+
+    def notify_done(self, title: str = "") -> None:
+        """Ping the tray when a run finishes while the bar is hidden."""
+        if not self.visible and self.tray is not None:
+            self.tray.notify(title or "Finished.", "Vigil")
 
     # -------------------------------------------------------------- settings
     def set_mode(self, mode: str) -> dict:
@@ -192,57 +286,90 @@ class Api:
         except ValueError as exc:
             return {"error": str(exc)}
 
-    # --------------------------------------------------------------- window
-    def minimize(self) -> None:
-        if self.window is not None:
-            self.window.minimize()
-
-    def toggle_maximize(self) -> None:
-        if self.window is None:
-            return
-        if getattr(self.window, "_vigil_maximized", False):
-            self.window.restore()
-            self.window._vigil_maximized = False
-        else:
-            self.window.maximize()
-            self.window._vigil_maximized = True
-
-    def close(self) -> None:
+    # ------------------------------------------------------------- shutdown
+    def quit(self) -> None:
         for session in list(self.sessions.values()):
             session.close()
-        if self.window is not None:
+        if self.hotkey is not None:
+            self.hotkey.stop()
+        if self.tray is not None:
+            self.tray.stop()
+        try:
             self.window.destroy()
+        except Exception:
+            pass
+
+
+def _polish_window(api: Api) -> None:
+    """Apply the native glass once the window exists, then size it correctly.
+
+    The window has to settle before either step: the handle does not exist right
+    away, and a resize issued too early is overwritten by the window's own
+    initial sizing.
+    """
+    for _ in range(60):
+        hwnd = native.find_window(WINDOW_TITLE)
+        if hwnd:
+            api.hwnd = hwnd
+            native.apply_glass(hwnd, backdrop=native.BACKDROP_ACRYLIC, rounded=True)
+            native.set_topmost(hwnd, True)
+            time.sleep(0.35)
+            api.fit()
+            return
+        time.sleep(0.05)
 
 
 def run(config: Config = None, debug: bool = False) -> int:
-    """Open the desktop window. Blocks until it is closed."""
+    """Open the bar. Blocks until it is quit."""
     try:
         import webview
     except ImportError:
         raise SystemExit(
-            "The desktop app needs pywebview.\n"
-            '  pip install "vigil-cli[desktop]"'
+            'The desktop app needs pywebview.\n  pip install "vigil-cli[desktop]"'
         ) from None
 
     config = config or Config.load()
     ensure_dirs()
 
+    screen_width, _ = native.screen_size()
     api = Api(config)
+
     window = webview.create_window(
-        "Vigil",
+        WINDOW_TITLE,
         str(WEB_DIR / "index.html"),
         js_api=api,
-        width=WINDOW_WIDTH,
-        height=WINDOW_HEIGHT,
-        min_size=MIN_SIZE,
+        width=BAR_WIDTH,
+        height=BAR_HEIGHT,
+        # the default minimum is (200, 100), which silently makes the collapsed
+        # bar a third taller than it should be
+        min_size=(420, 40),
+        x=max(0, (screen_width - BAR_WIDTH) // 2),
+        y=TOP_MARGIN,
         frameless=True,
-        easy_drag=False,  # only the title bar drags; see .drag-region in the CSS
-        background_color=BACKGROUND,
+        easy_drag=False,  # only the grip drags; see .drag-region in the CSS
+        on_top=True,
+        resizable=False,
+        background_color="#0B0E14",
+        transparent=True,
+        shadow=True,
         text_select=True,
     )
     api.attach(window)
 
+    api.tray = Tray(on_show=api.show_window, on_hide=api.hide_window, on_quit=api.quit)
+    api.tray.start()
+
+    api.hotkey = native.HotKey(api.toggle_window)
+    api.hotkey.start()
+
+    threading.Thread(target=_polish_window, args=(api,), daemon=True).start()
+
     webview.start(debug=debug, icon=str(ICON) if ICON.exists() else None)
+
+    if api.hotkey is not None:
+        api.hotkey.stop()
+    if api.tray is not None:
+        api.tray.stop()
     return 0
 
 
