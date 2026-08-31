@@ -54,6 +54,7 @@ no subscription.
 | | |
 |---|---|
 | **Always a keystroke away** | Ctrl+Shift+Space summons the bar over whatever you are doing. It runs from the tray. |
+| **It can use the mouse** | Describe a button and it finds it on screen and clicks it — any app, not just the terminal. |
 | **Free** | Groq's free tier is enough, and the key takes 30 seconds to get. Or stay entirely offline with Ollama. |
 | **Safe** | Every risky step is put to you for approval. Some actions never run, in any mode. |
 | **Transparent** | You see each step as it happens, and every decision is written to an audit log. |
@@ -108,9 +109,9 @@ vigil app                      # open the bar
 vigil app --install-shortcut   # put Vigil on your desktop, with its icon
 ```
 
-A pill at the top of the screen, always on top, made of real Windows acrylic — not a
-gradient pretending to be glass. Ask it something and it grows into a panel; press Escape
-and it shrinks back to one line.
+A pill at the top of the screen, always on top. Ask it something and it grows into a panel;
+press Escape and it shrinks back to one line. Warm, matte surfaces, hairline edges, no
+gradients — the same restraint the rest of the tool is built with.
 
 <img src="docs/screenshot.png" alt="The bar expanded, mid-task" width="760">
 
@@ -123,10 +124,14 @@ and it shrinks back to one line.
 
 <img src="docs/approval.png" alt="An approval prompt" width="760">
 
+Runs on **Windows and macOS** (and Linux, with the same caveats as any GTK app). The window is
+[pywebview](https://pywebview.flowrl.com/) over the system WebView — WebView2 on Windows,
+WebKit on macOS. Rounded corners and the dark frame come from DWM on Windows and from the
+system on macOS; where an API is missing the call is skipped and the CSS carries the look.
+The summon key uses `RegisterHotKey` on Windows and `pynput` elsewhere.
+
 The front end is one HTML file, one CSS file and one JS file — no framework, no bundler, no
-network access. The window is [pywebview](https://pywebview.flowrl.com/) over the system
-WebView, with the glass applied through DWM (`vigil/desktop/native.py`). On Windows 10 or
-other platforms the native effects are skipped and the CSS carries the look.
+network access.
 
 ---
 
@@ -225,19 +230,48 @@ warning automatically.
 
 ## Tools
 
-44 tools across 7 groups:
+45 tools across 7 groups:
 
 | Group | Tools |
 |---|---|
 | **terminal** | `run_command`, `change_dir`, `current_dir` |
 | **file** | `read_file`, `write_file`, `edit_file`, `list_dir`, `find_files`, `search_text`, `make_dir`, `copy_path`, `move_path`, `delete_path` |
 | **system** | `system_info`, `list_processes`, `kill_process`, `disk_usage`, `network_info`, `list_installed_apps`, `open_app`, `clean_temp` |
-| **screen** | `screen_capture`, `screen_size`, `mouse_click`, `mouse_move`, `mouse_scroll`, `keyboard_type`, `press_keys`, `list_windows`, `focus_window`, `clipboard` |
+| **screen** | `screen_capture`, `click_on`, `screen_size`, `mouse_click`, `mouse_move`, `mouse_scroll`, `keyboard_type`, `press_keys`, `list_windows`, `focus_window`, `clipboard` |
 | **browser** | `browser_open`, `browser_read`, `browser_click`, `browser_type`, `browser_screenshot`, `browser_back`, `browser_close` |
 | **memory** | `remember`, `recall`, `forget` |
 | **planning** | `create_plan`, `update_plan`, `show_plan` |
 
 Groups whose dependencies are missing switch themselves off — Vigil keeps working with the rest.
+
+---
+
+## Driving the whole machine
+
+Vigil is not limited to the terminal. It can look at the screen and use the mouse and keyboard
+in any application:
+
+```
+vigil > open the settings app and turn on night light
+```
+
+The tool that makes this work is `click_on`. Rather than guessing coordinates from a
+description — which models are poor at — it takes a screenshot, asks a vision model where the
+element is, and clicks the point that comes back:
+
+| Tool | What it does |
+|---|---|
+| `screen_capture` | look at the screen and describe it |
+| `click_on` | find something by description and click it |
+| `keyboard_type` · `press_keys` | type, or send a shortcut |
+| `list_windows` · `focus_window` | see what is open, bring one forward |
+| `mouse_click` · `mouse_move` · `mouse_scroll` | precise control when coordinates are known |
+
+Every one of these asks before it acts in `ask` mode, and the screenshot going to the model is
+called out in the prompt — whatever is on screen goes with it.
+
+On macOS you will be asked for **Screen Recording** and **Accessibility** permission the first
+time; that is macOS, not Vigil, and nothing works until you grant them.
 
 ---
 
@@ -428,7 +462,9 @@ See [docs/architecture.md](docs/architecture.md) for the design,
 - [x] Ollama support (fully local)
 - [x] Plugin system (`~/.vigil/plugins/`)
 - [x] Persistent memory (global + project)
-- [x] Desktop bar: acrylic glass, global hot key, tray, live plan
+- [x] Desktop bar: global hot key, tray, live plan
+- [x] macOS support
+- [x] Click anything on screen by describing it
 - [x] Task planner: a visible checklist for multi-step jobs
 - [ ] Scheduled tasks (`vigil schedule`)
 - [ ] More providers: Gemini, OpenRouter

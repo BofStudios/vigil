@@ -34,6 +34,7 @@ BAR_WIDTH = 720
 BAR_HEIGHT = 68
 PANEL_HEIGHT = 620
 TOP_MARGIN = 14
+BACKGROUND = "#1F1E1D"  # matches --bg in the stylesheet
 
 _tab_ids = itertools.count(1)
 
@@ -301,7 +302,7 @@ class Api:
 
 
 def _polish_window(api: Api) -> None:
-    """Apply the native glass once the window exists, then size it correctly.
+    """Find the window, apply what the platform offers, then size it correctly.
 
     The window has to settle before either step: the handle does not exist right
     away, and a resize issued too early is overwritten by the window's own
@@ -334,26 +335,30 @@ def run(config: Config = None, debug: bool = False) -> int:
     screen_width, _ = native.screen_size()
     api = Api(config)
 
-    window = webview.create_window(
-        WINDOW_TITLE,
-        str(WEB_DIR / "index.html"),
-        js_api=api,
-        width=BAR_WIDTH,
-        height=BAR_HEIGHT,
+    options = {
+        "js_api": api,
+        "width": BAR_WIDTH,
+        "height": BAR_HEIGHT,
         # the default minimum is (200, 100), which silently makes the collapsed
         # bar a third taller than it should be
-        min_size=(420, 40),
-        x=max(0, (screen_width - BAR_WIDTH) // 2),
-        y=TOP_MARGIN,
-        frameless=True,
-        easy_drag=False,  # only the grip drags; see .drag-region in the CSS
-        on_top=True,
-        resizable=False,
-        background_color="#0B0E14",
-        transparent=True,
-        shadow=True,
-        text_select=True,
-    )
+        "min_size": (420, 40),
+        "x": max(0, (screen_width - BAR_WIDTH) // 2),
+        "y": TOP_MARGIN,
+        "frameless": True,
+        "easy_drag": False,  # only the grip drags; see .drag-region in the CSS
+        "on_top": True,
+        "resizable": False,
+        "background_color": BACKGROUND,
+        "shadow": True,
+        "text_select": True,
+    }
+    if native.IS_MAC:
+        # macOS draws the blur itself and rounds the corners for us
+        options["vibrancy"] = True
+    else:
+        options["transparent"] = True
+
+    window = webview.create_window(WINDOW_TITLE, str(WEB_DIR / "index.html"), **options)
     api.attach(window)
 
     api.tray = Tray(on_show=api.show_window, on_hide=api.hide_window, on_quit=api.quit)

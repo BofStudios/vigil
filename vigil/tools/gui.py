@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import io
 import platform
+import re
 import time
 
 from ..config import SCREENSHOT_DIR
@@ -104,6 +105,69 @@ def screen_capture(ctx: ToolContext, question: str = "", monitor: int = 1, regio
     if saved_path:
         result += "\n\nSaved to: " + saved_path
     return result
+
+
+# ---------------------------------------------------------------- click_on
+COORD_PATTERN = re.compile(r"\(?\s*(\d{1,5})\s*[, ]\s*(\d{1,5})\s*\)?")
+
+
+def click_on(ctx: ToolContext, target: str, button: str = "left", double: bool = False) -> str:
+    """Find something on screen by description and click it.
+
+    Screenshot, ask the vision model where the thing is, click there. Without
+    this the model has to eyeball coordinates from a description, which it is
+    bad at; here it gets to look at the pixels and answer with a point.
+    """
+    if not target.strip():
+        raise ToolError("Describe what to click.")
+
+    allowed, reason = ctx.guard.check_action(
+        "click_on",
+        "find and click: " + target,
+        Risk.MODERATE,
+        "screen is sent to the model, then clicked",
+        detail="A screenshot goes to the AI model to locate the element, then the mouse clicks it.",
+    )
+    if not allowed:
+        raise PermissionDenied(reason)
+    if ctx.provider is None:
+        raise ToolError("No vision model connection available.")
+
+    image, area = _capture(1, None)
+    width, height = image.size
+    prompt = (
+        "Find this element on the screen: " + target + "\n"
+        "The image is " + str(width) + " by " + str(height) + " pixels.\n"
+        "Reply with ONLY the centre point of the element, as two integers: x, y\n"
+        "If you cannot find it, reply with exactly: NOT FOUND"
+    )
+
+    try:
+        answer = ctx.provider.vision(prompt, _encode(image))
+    except Exception as exc:
+        raise ToolError("Could not look at the screen: " + str(exc)) from exc
+
+    if "not found" in answer.lower():
+        raise ToolError(
+            "Could not find " + target + " on screen. Try screen_capture first to see what is there."
+        )
+
+    match = COORD_PATTERN.search(answer)
+    if not match:
+        raise ToolError("The model did not return a point. It said: " + answer[:160])
+
+    # the model saw the resized image, so scale its answer back to the screen
+    seen_width = min(width, MAX_IMAGE_WIDTH)
+    scale = area["width"] / float(seen_width)
+    x = int(int(match.group(1)) * scale) + area.get("left", 0)
+    y = int(int(match.group(2)) * scale) + area.get("top", 0)
+
+    screen_w, screen_h = pyautogui.size()
+    if not (0 <= x < screen_w and 0 <= y < screen_h):
+        raise ToolError("The located point (" + str(x) + ", " + str(y) + ") is off screen.")
+
+    pyautogui.click(x=x, y=y, clicks=2 if double else 1, button=button)
+    return "Clicked " + target + " at (" + str(x) + ", " + str(y) + ")."
 
 
 # ------------------------------------------------------------- screen_size
@@ -316,6 +380,26 @@ TOOLS = [
         group="screen",
         risk=Risk.MODERATE,
         preview=lambda a: "screen analysis: " + str(a.get("question", ""))[:60],
+    ),
+    ToolSpec(
+        name="click_on",
+        description=(
+            "Find something on screen by describing it, then click it. Use this instead of "
+            "guessing coordinates: 'the Save button', 'the search box', 'the X on the dialog'."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "What to click, described plainly"},
+                "button": {"type": "string", "enum": ["left", "right", "middle"], "default": "left"},
+                "double": {"type": "boolean", "description": "Double-click instead", "default": False},
+            },
+            "required": ["target"],
+        },
+        handler=click_on,
+        group="screen",
+        risk=Risk.MODERATE,
+        preview=lambda a: "find and click: " + str(a.get("target", "")),
     ),
     ToolSpec(
         name="screen_size",

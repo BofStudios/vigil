@@ -1,129 +1,101 @@
-"""Generate the Vigil app icon.
+"""Generate the Vigil mark.
 
-The mark is a shield split by a vertical gap: the negative space reads as a "V",
-the silhouette reads as protection, and a single dot sits where an eye would be -
-vigilance. Drawn at 8x and downsampled so the curves stay clean at 16 px.
+The mark is a caret cradling a single dot: the "V" of the name, the prompt
+symbol every command line has used for fifty years, and something watching from
+inside it. A bare chevron would be any icon; the dot is what makes it this one.
+
+Flat colour, no gradients, no glow - the surface is matte and the only light is
+a hairline along the top edge, the way a real object catches a room.
 
 Run:  python tools/make_icon.py
-Writes vigil/assets/vigil.ico, vigil.png and logo.svg
+Writes vigil/assets/vigil.ico, vigil.png, logo.svg and mark.svg
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 ASSETS = Path(__file__).resolve().parent.parent / "vigil" / "assets"
 SCALE = 8
 SIZE = 256
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
-# Palette - matches the terminal UI accent.
-BG_TOP = (14, 18, 26)
-BG_BOTTOM = (8, 11, 16)
-CYAN = (34, 211, 238)
-CYAN_DEEP = (14, 165, 210)
-GLOW = (34, 211, 238)
+# Warm, matte, no blue anywhere.
+PLATE = (31, 30, 29)          # #1F1E1D
+PLATE_EDGE = (255, 255, 255)  # hairline, applied at low alpha
+CORAL = (217, 119, 87)        # #D97757
 
 
-def _vertical_gradient(size: int, top: tuple, bottom: tuple) -> Image.Image:
-    gradient = Image.new("RGB", (1, size))
-    for y in range(size):
-        ratio = y / max(1, size - 1)
-        gradient.putpixel(
-            (0, y),
-            (
-                round(top[0] + (bottom[0] - top[0]) * ratio),
-                round(top[1] + (bottom[1] - top[1]) * ratio),
-                round(top[2] + (bottom[2] - top[2]) * ratio),
-            ),
+def _caret(draw, canvas: int, colour, weight: float, span: float, top: float, bottom: float):
+    """Two strokes meeting at a rounded apex - the caret."""
+    centre = canvas / 2
+    stroke = round(canvas * weight)
+    half = canvas * span
+
+    apex = (centre, canvas * bottom)
+    left = (centre - half, canvas * top)
+    right = (centre + half, canvas * top)
+
+    draw.line([left, apex], fill=colour, width=stroke, joint="curve")
+    draw.line([apex, right], fill=colour, width=stroke, joint="curve")
+
+    # round every end by hand: PIL has no line caps
+    for point in (left, apex, right):
+        radius = stroke / 2
+        draw.ellipse(
+            [point[0] - radius, point[1] - radius, point[0] + radius, point[1] + radius],
+            fill=colour,
         )
-    return gradient.resize((size, size), Image.NEAREST)
-
-
-def _shield_points(cx: float, top: float, bottom: float, half_width: float) -> list:
-    """A shield outline: straight shoulders, tapering to a point."""
-    shoulder = top + (bottom - top) * 0.10
-    waist = top + (bottom - top) * 0.55
-    return [
-        (cx - half_width, shoulder),
-        (cx - half_width, waist),
-        (cx, bottom),
-        (cx + half_width, waist),
-        (cx + half_width, shoulder),
-        (cx, top),
-    ]
 
 
 def build_icon(size: int = SIZE) -> Image.Image:
     canvas = size * SCALE
     image = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
-
-    # --- rounded background plate with a vertical gradient ---
-    plate = _vertical_gradient(canvas, BG_TOP, BG_BOTTOM).convert("RGBA")
-    mask = Image.new("L", (canvas, canvas), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        [0, 0, canvas - 1, canvas - 1], radius=int(canvas * 0.22), fill=255
-    )
-    image.paste(plate, (0, 0), mask)
-
-    # --- soft glow behind the mark ---
-    glow = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
-    ImageDraw.Draw(glow).ellipse(
-        [canvas * 0.22, canvas * 0.20, canvas * 0.78, canvas * 0.86],
-        fill=GLOW + (70,),
-    )
-    glow = glow.filter(ImageFilter.GaussianBlur(canvas * 0.09))
-    image = Image.alpha_composite(image, glow)
-
     draw = ImageDraw.Draw(image)
 
-    # --- shield ---
-    cx = canvas / 2
-    top = canvas * 0.20
-    bottom = canvas * 0.83
-    half = canvas * 0.235
-    stroke = max(1, int(canvas * 0.055))
+    radius = int(canvas * 0.225)
+    draw.rounded_rectangle([0, 0, canvas - 1, canvas - 1], radius=radius, fill=PLATE + (255,))
 
-    # A closed shield reads better than a notched one at 16 px - the "V" already
-    # comes from the shield's own point, so the outline stays quiet.
-    draw.polygon(_shield_points(cx, top, bottom, half), outline=CYAN, width=stroke)
-
-    # Inner shield line, deeper in tone, for depth.
-    inset = canvas * 0.062
-    draw.polygon(
-        _shield_points(cx, top + inset, bottom - inset * 1.2, half - inset),
-        outline=CYAN_DEEP,
-        width=max(1, int(stroke * 0.42)),
+    # hairline along the top edge only, so the plate reads as a solid object
+    edge = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    ImageDraw.Draw(edge).rounded_rectangle(
+        [0, 0, canvas - 1, canvas - 1],
+        radius=radius,
+        outline=PLATE_EDGE + (26,),
+        width=max(1, int(canvas * 0.006)),
     )
+    image = Image.alpha_composite(image, edge)
+    draw = ImageDraw.Draw(image)
 
-    # --- the eye: a single dot, centred ---
-    dot = canvas * 0.055
-    draw.ellipse([cx - dot, canvas * 0.445 - dot, cx + dot, canvas * 0.445 + dot], fill=CYAN)
+    _caret(draw, canvas, CORAL + (255,), weight=0.082, span=0.212, top=0.318, bottom=0.700)
+
+    # the eye, sitting in the opening of the caret rather than under it -
+    # below the apex it reads as an upside-down exclamation mark
+    dot = canvas * 0.048
+    centre = canvas / 2
+    baseline = canvas * 0.452
+    draw.ellipse([centre - dot, baseline - dot, centre + dot, baseline + dot], fill=CORAL + (255,))
 
     return image.resize((size, size), Image.LANCZOS)
 
 
-SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <defs>
-    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0e121a"/>
-      <stop offset="100%" stop-color="#080b10"/>
-    </linearGradient>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="12" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-  <rect width="256" height="256" rx="56" fill="url(#plate)"/>
-  <g filter="url(#glow)" fill="none" stroke="#22d3ee" stroke-width="14"
-     stroke-linejoin="round" stroke-linecap="round">
-    <path d="M68 77 V141 L128 212 L188 141 V77 L128 51 Z"/>
-  </g>
-  <path d="M79 88 V138 L128 196 L177 138 V88 L128 67 Z"
-        fill="none" stroke="#0ea5d2" stroke-width="6" stroke-linejoin="round"/>
-  <circle cx="128" cy="116" r="13" fill="#22d3ee"/>
+LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <rect width="256" height="256" rx="58" fill="#1F1E1D"/>
+  <rect x="1" y="1" width="254" height="254" rx="57" fill="none"
+        stroke="#ffffff" stroke-opacity=".10" stroke-width="1.5"/>
+  <path d="M73.7 81.4 L128 179.2 L182.3 81.4" fill="none" stroke="#D97757"
+        stroke-width="21" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="128" cy="115.7" r="12.3" fill="#D97757"/>
+</svg>
+"""
+
+# The mark on its own, for use on any background.
+MARK_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <path d="M73.7 81.4 L128 179.2 L182.3 81.4" fill="none" stroke="currentColor"
+        stroke-width="21" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="128" cy="115.7" r="12.3" fill="currentColor"/>
 </svg>
 """
 
@@ -131,8 +103,7 @@ SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="25
 def main() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
 
-    master = build_icon(SIZE)
-    master.save(ASSETS / "vigil.png")
+    build_icon(SIZE).save(ASSETS / "vigil.png")
 
     frames = [build_icon(size) for size in ICO_SIZES]
     frames[-1].save(
@@ -142,11 +113,11 @@ def main() -> None:
         append_images=frames[:-1],
     )
 
-    (ASSETS / "logo.svg").write_text(SVG, encoding="utf-8")
+    (ASSETS / "logo.svg").write_text(LOGO_SVG, encoding="utf-8")
+    (ASSETS / "mark.svg").write_text(MARK_SVG, encoding="utf-8")
 
-    print("wrote", ASSETS / "vigil.ico")
-    print("wrote", ASSETS / "vigil.png")
-    print("wrote", ASSETS / "logo.svg")
+    for name in ("vigil.ico", "vigil.png", "logo.svg", "mark.svg"):
+        print("wrote", ASSETS / name)
 
 
 if __name__ == "__main__":

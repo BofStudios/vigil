@@ -28,17 +28,18 @@ MOCK = """
   const send = (p) => setTimeout(() => window.vigil.receive(p), p._at || 0);
   window.pywebview = { api: {
     ready: async () => ({
-      version: "0.4.0", provider: "groq", model: "openai/gpt-oss-120b", mode: "ask",
+      version: "0.5.0", provider: "groq", model: "openai/gpt-oss-120b", mode: "ask",
       warning: "", hotkey: true, tray: true,
       tabs: [{ id: "tab-1", title: "Tidy the downloads folder",
-               cwd: "C:\\\\Users\\\\you\\\\Downloads", busy: false, tools: 44 }],
+               cwd: "C:\\\\Users\\\\you\\\\Downloads", busy: false, tools: 45 }],
     }),
-    new_tab: async () => ({ id: "tab-2", title: "New session", cwd: "C:\\\\", tools: 44 }),
+    new_tab: async () => ({ id: "tab-2", title: "New session", cwd: "C:\\\\", tools: 45 }),
     close_tab: async () => ({ tabs: [] }), send: async () => ({ ok: true }),
     stop: async () => ({ ok: true }), answer: async () => ({ ok: true }),
     set_mode: async (m) => ({ mode: m }), set_model: async (m) => ({ model: m }),
     models: async () => ({ models: [] }), tools: async () => ({ groups: {} }),
     pick_folder: async () => ({ cancelled: true }), notify_done() {},
+    fit: async () => ({ ok: true }),
     expand() {}, collapse() {}, hide_window() {}, show_window() {},
   }};
 
@@ -76,13 +77,10 @@ MOCK = """
 })();
 """
 
-# The real window floats over the desktop; this stands in for a wallpaper so the
-# acrylic has something to blur.
+# The real window floats over the desktop; a flat dark ground stands in for it
+# so the shell reads as the solid, matte object it is.
 BACKDROP = """
-html { background:
-  radial-gradient(60% 60% at 18% 12%, #1d3b57 0%, transparent 60%),
-  radial-gradient(50% 50% at 82% 8%, #3a2a52 0%, transparent 62%),
-  linear-gradient(160deg, #0f1420 0%, #131a26 55%, #0a0e16 100%) !important; }
+html { background: #14100e !important; }
 body { padding: 0 !important; }
 """
 

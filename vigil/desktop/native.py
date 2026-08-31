@@ -1,9 +1,9 @@
-"""Native window polish on Windows: real acrylic, rounded corners, dark frame.
+"""Native window polish, per platform.
 
-CSS cannot blur what is *behind* a window - only the compositor can. Windows 11
-exposes that through DWM, so the glass here is the same one the shell uses, not a
-gradient pretending to be one. Everything degrades quietly: on Windows 10 or any
-other platform these calls simply do nothing and the CSS fallback carries the look.
+Windows 11 gets its rounded corners and dark frame from DWM. macOS gets its
+vibrancy from pywebview itself (see app.py), and its corners from the system.
+Everything here degrades quietly: on an older Windows, on Linux, or anywhere the
+API is missing, the calls do nothing and the CSS carries the look on its own.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import sys
 from ctypes import wintypes
 
 IS_WINDOWS = platform.system() == "Windows"
+IS_MAC = platform.system() == "Darwin"
 
 # DwmSetWindowAttribute attributes
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20
@@ -190,16 +191,38 @@ class HotKey:
         self.registered = False
         self._thread = None
         self._thread_id = None
+        self._listener = None
 
     def start(self) -> bool:
-        if not IS_WINDOWS:
-            return False
         import threading
+
+        if not IS_WINDOWS:
+            return self._start_pynput()
 
         ready = threading.Event()
         self._thread = threading.Thread(target=self._loop, args=(ready,), daemon=True)
         self._thread.start()
         ready.wait(timeout=2)
+        return self.registered
+
+    def _start_pynput(self) -> bool:
+        """macOS and Linux have no RegisterHotKey; pynput covers them when installed.
+
+        It is not a dependency - without it the tray and the shortcut are still
+        there, you just do not get the summon key.
+        """
+        try:
+            from pynput import keyboard
+        except ImportError:
+            return False
+
+        try:
+            self._listener = keyboard.GlobalHotKeys({"<ctrl>+<shift>+<space>": self.callback})
+            self._listener.daemon = True
+            self._listener.start()
+            self.registered = True
+        except Exception:
+            self.registered = False
         return self.registered
 
     def _loop(self, ready) -> None:
@@ -227,6 +250,14 @@ class HotKey:
             pass
 
     def stop(self) -> None:
+        if self._listener is not None:
+            try:
+                self._listener.stop()
+            except Exception:
+                pass
+            self._listener = None
+            self.registered = False
+            return
         if not IS_WINDOWS or not self.registered:
             return
         try:
