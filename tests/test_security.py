@@ -161,3 +161,65 @@ def test_denied_counter():
     guard = _guard("ask")
     guard.evaluate(Action("run_command", "rm -rf /", Verdict(Risk.BLOCKED, "test")))
     assert guard.denied_count == 1
+
+
+# ------------------------------------------------- taking the mouse/keyboard
+INPUT_TOOLS = ["mouse_click", "click_on", "keyboard_type", "press_keys", "screen_capture"]
+
+
+@pytest.mark.parametrize("tool", INPUT_TOOLS)
+def test_input_control_is_asked_even_in_yolo(tool):
+    """No mode waves through control of the pointer, the keyboard or the screen."""
+    asked = []
+
+    def confirm(action):
+        asked.append(action.tool)
+        return "yes"
+
+    guard = Guard(mode="yolo", confirm=confirm, audit=False)
+    allowed, _ = guard.check_action(tool, "take the mouse", Risk.MODERATE)
+
+    assert allowed is True
+    assert asked == [tool]
+
+
+@pytest.mark.parametrize("tool", INPUT_TOOLS)
+def test_input_control_is_asked_even_in_auto(tool):
+    asked = []
+    guard = Guard(mode="auto", confirm=lambda action: asked.append(action.tool) or "yes", audit=False)
+    guard.check_action(tool, "take the keyboard", Risk.MODERATE)
+    assert asked == [tool]
+
+
+def test_input_control_is_asked_every_single_time():
+    """"Always allow" is not on offer: each grab of the pointer stands alone."""
+    asked = []
+    guard = Guard(mode="auto", confirm=lambda action: asked.append(action.tool) or "always", audit=False)
+
+    for _ in range(3):
+        allowed, _ = guard.check_action("mouse_click", "click (10, 10)", Risk.MODERATE)
+        assert allowed is True
+
+    assert len(asked) == 3           # asked afresh every time
+    assert guard.session_allow == set()   # and nothing was remembered
+
+
+def test_declining_input_control_stops_it():
+    guard = Guard(mode="yolo", confirm=lambda action: "no", audit=False)
+    allowed, reason = guard.check_action("keyboard_type", "type a password", Risk.MODERATE)
+    assert allowed is False
+    assert "declined" in reason
+
+
+def test_input_control_is_refused_without_anyone_to_ask():
+    guard = Guard(mode="yolo", confirm=None, audit=False)
+    allowed, reason = guard.check_action("click_on", "click the button", Risk.MODERATE)
+    assert allowed is False
+    assert "always confirmed" in reason
+
+
+def test_ordinary_work_still_runs_unattended_in_auto():
+    """The point of the policy is that everything else gets out of the way."""
+    guard = Guard(mode="auto", confirm=None, audit=False)
+    assert guard.check_command("run_command", "python build.py")[0] is True
+    assert guard.check_path("write_file", "notes.txt", write=True)[0] is True

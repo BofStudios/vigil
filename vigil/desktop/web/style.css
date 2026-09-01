@@ -7,26 +7,29 @@
    Nothing loads from the network. */
 
 :root {
-  --bg:          #1f1e1d;
-  --surface:     #262624;
-  --surface-2:   #2f2e2c;
-  --sunken:      #1a1918;
+  /* Near-black, with light read as specular highlight rather than as fill -
+     the way it sits on polished metal. Colour is reserved for meaning: the
+     three risk signals and nothing else. */
+  --bg:          #060607;
+  --surface:     #0e0e10;
+  --surface-2:   #17171a;
+  --sunken:      #030304;
 
-  --edge:        rgba(255, 255, 255, .075);   /* hairline around a surface */
-  --edge-top:    rgba(255, 255, 255, .14);    /* the sheen along a top edge */
-  --edge-strong: rgba(255, 255, 255, .13);
+  --edge:        rgba(255, 255, 255, .085);  /* hairline around a surface */
+  --edge-top:    rgba(255, 255, 255, .24);   /* the highlight along a top edge */
+  --edge-strong: rgba(255, 255, 255, .16);
 
-  --text:        #f5f4ef;
-  --text-dim:    rgba(245, 244, 239, .62);
-  --text-faint:  rgba(245, 244, 239, .36);
+  --text:        #f4f4f6;
+  --text-dim:    rgba(244, 244, 246, .60);
+  --text-faint:  rgba(244, 244, 246, .34);
 
-  --accent:      #d97757;
-  --accent-ink:  #1f1310;
-  --accent-wash: rgba(217, 119, 87, .13);
+  --accent:      #ececeF;                    /* chrome, not a colour */
+  --accent-ink:  #08080a;
+  --accent-wash: rgba(255, 255, 255, .10);
 
-  --safe:        #8fb37c;
-  --moderate:    #d9a65c;
-  --high:        #d9736b;
+  --safe:        #7fb289;
+  --moderate:    #cfae6a;
+  --high:        #d6786f;
 
   --r-bar:       30px;
   --r-lg:        20px;
@@ -57,7 +60,7 @@ html, body {
   cursor: default;
 }
 
-::selection { background: rgba(217, 119, 87, .28); }
+::selection { background: rgba(255, 255, 255, .20); }
 
 .drag-region { -webkit-app-region: drag; app-region: drag; }
 
@@ -71,7 +74,7 @@ html, body {
   box-shadow:
     inset 0 0 0 1px var(--edge),
     inset 0 1px 0 0 var(--edge-top),
-    0 16px 44px rgba(0, 0, 0, .55);
+    0 20px 60px rgba(0, 0, 0, .8);
   overflow: hidden;
   animation: settle .46s var(--flow) both;
 }
@@ -112,7 +115,7 @@ html, body {
   position: absolute;
   inset: -7px;
   border-radius: 50%;
-  border: 1px solid var(--accent);
+  border: 1px solid rgba(255, 255, 255, .55);
   opacity: 0;
   animation: outward 2.6s var(--flow) infinite;
 }
@@ -153,15 +156,15 @@ html, body {
 .round svg { width: 18px; height: 18px; }
 
 .send { background: var(--accent); color: var(--accent-ink); }
-.send:hover { background: #e08464; }
-.send:active { background: #c96a4c; }
+.send:hover { background: #ffffff; }
+.send:active { background: #cfcfd4; }
 .send:disabled {
   background: var(--surface-2);
   color: var(--text-faint);
   cursor: default;
 }
 
-.stop { background: rgba(217, 115, 107, .16); color: var(--high); }
+.stop { background: rgba(214, 120, 111, .14); color: var(--high); }
 .stop:hover { background: rgba(217, 115, 107, .26); }
 
 .ghost { color: var(--text-faint); }
@@ -186,6 +189,35 @@ html, body {
 }
 .mode-auto .mode-dot i { background: var(--moderate); }
 .mode-yolo .mode-dot i { background: var(--high); animation: breathe 2s var(--flow) infinite; }
+
+/* ------------------------------------------------------------- resting */
+/* At rest the window is a small pill: the mark, the name, nothing to read.
+   The pointer arriving is what opens it, so it never sits there demanding
+   attention. */
+.pill-hint {
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 560;
+  letter-spacing: .01em;
+  color: var(--text-dim);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity .22s var(--flow), transform .28s var(--flow);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.resting .pill-hint { opacity: 1; transform: none; }
+
+.resting .bar { gap: 10px; padding: 0 16px 0 17px; }
+.resting #input { display: none; }
+.resting .bar-actions { gap: 0; }
+.resting .send,
+.resting .stop,
+.resting #win-close { display: none; }
+.resting .mode-dot { opacity: .8; }
+
+/* the pill is a smaller object, so its corners are smaller too */
+.resting.shell { border-radius: 23px; }
 
 /* ----------------------------------------------------------------- panel */
 .panel {
@@ -236,7 +268,7 @@ html, body {
 .tab-label { overflow: hidden; text-overflow: ellipsis; }
 .tab-spin {
   width: 8px; height: 8px; flex: 0 0 auto;
-  border: 1.5px solid rgba(217, 119, 87, .25);
+  border: 1.5px solid rgba(255, 255, 255, .18);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: turn .9s linear infinite;
@@ -315,7 +347,7 @@ html, body {
   content: "";
   position: absolute; left: 3.6px; top: .6px;
   width: 3.6px; height: 7.2px;
-  border: solid #1c2a17;
+  border: solid #06120a;
   border-width: 0 1.7px 1.7px 0;
   transform: rotate(42deg);
   animation: mark-in .3s var(--flow) both;
@@ -371,7 +403,7 @@ html, body {
   border-radius: 5px;
   background: var(--surface-2);
   font-family: var(--mono); font-size: 12px;
-  color: #e8b79f;
+  color: #dfe3e8;
 }
 .say .body pre {
   margin: 7px 0;
@@ -537,7 +569,7 @@ html, body {
 }
 .risk.safe     { background: rgba(143, 179, 124, .16); color: var(--safe); }
 .risk.moderate { background: rgba(217, 166, 92, .16);  color: var(--moderate); }
-.risk.high     { background: rgba(217, 115, 107, .16); color: var(--high); }
+.risk.high     { background: rgba(214, 120, 111, .14); color: var(--high); }
 .dialog-tool { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
 
 .dialog-title {
@@ -581,13 +613,13 @@ html, body {
 .key kbd {
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, .08);
+  background: rgba(255, 255, 255, .10);
   font-family: var(--mono); font-size: 10px;
   opacity: .85;
 }
 .key.allow { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
 .key.allow kbd { background: rgba(31, 19, 16, .22); }
-.key.allow:hover { background: #e08464; }
+.key.allow:hover { background: #ffffff; }
 .key.deny:hover { background: rgba(217, 115, 107, .18); }
 .key.soft { margin-left: auto; color: var(--text-dim); }
 .key.soft:hover { background: #3a3936; }

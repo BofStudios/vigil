@@ -36,7 +36,9 @@ class Config:
     api_key: str = ""
     model: str = DEFAULT_MODEL
     vision_model: str = DEFAULT_VISION_MODEL
-    approval_mode: str = "ask"  # ask | auto | yolo
+    # auto by default: routine work runs unattended, while taking the mouse,
+    # keyboard or screen is confirmed every time regardless (see ALWAYS_ASK)
+    approval_mode: str = "auto"  # ask | auto | yolo
     temperature: float = 0.3
     max_steps: int = 40
     max_tool_output: int = 12000

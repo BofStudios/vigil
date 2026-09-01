@@ -233,12 +233,39 @@ def test_hide_and_show_track_visibility(config):
     assert api.visible is True
 
 
-def test_toggle_flips_visibility(config):
+def test_toggle_opens_the_bar_before_it_hides_it(config):
+    """The hot key summons first. Hiding a pill nobody opened would be useless."""
     api = Api(config)
-    api.toggle_window()
-    assert api.visible is False
-    api.toggle_window()
+    assert api.resting is True
+
+    api.toggle_window()          # resting -> open
     assert api.visible is True
+    assert api.resting is False
+
+    api.toggle_window()          # open -> hidden
+    assert api.visible is False
+
+
+def test_resting_and_peeking_track_the_shape(config):
+    api = Api(config)
+    assert api.resting is True
+
+    api.peek()
+    assert api.resting is False
+
+    api.rest()
+    assert api.resting is True
+
+
+def test_expanding_leaves_the_resting_shape(config):
+    api = Api(config)
+    api.expand()
+    assert api.expanded is True
+    assert api.resting is False
+
+    # an expanded panel does not fold itself away behind the user's back
+    api.rest()
+    assert api.resting is False
 
 
 def test_sending_a_message_expands_the_bar(config):

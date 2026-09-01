@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vigil-cli"
-version = "0.5.0"
+version = "0.6.0"
 description = "A free, terminal-native AI agent that operates your computer - with a security layer that never disables your protections."
 readme = "README.md"
 requires-python = ">=3.9"

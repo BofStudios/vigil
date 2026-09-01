@@ -26,11 +26,15 @@
   };
 
   const MODES = ["ask", "auto", "yolo"];
+  // mirrors ALWAYS_ASK in security.py: these are confirmed one at a time,
+  // so "always" is never offered for them
+  const INPUT_CONTROL = new Set(["mouse_click", "mouse_move", "mouse_scroll", "click_on",
+                                 "keyboard_type", "press_keys", "screen_capture", "clipboard"]);
   const INPUT_MIN = 26;
   const INPUT_MAX = 132;
 
   const state = { tabs: new Map(), active: null, mode: "ask", model: "", pending: null,
-                  expanded: false };
+                  expanded: false, queued: "", resting: true };
 
   const api = () => window.pywebview && window.pywebview.api;
 
@@ -100,10 +104,26 @@
   };
 
   // ------------------------------------------------------------- geometry
+  /** Python owns the window shape and tells us which one it moved to; the
+   *  front end only has to dress itself to match. */
+  function applyShape(resting) {
+    state.resting = !!resting;
+    el.shell.classList.toggle("resting", state.resting);
+    if (!state.resting) setTimeout(() => el.input.focus(), 120);
+  }
+
+  function peek() {
+    if (!state.resting || state.expanded) return;
+    applyShape(false);
+    api().peek();
+  }
+
   function expand() {
     if (state.expanded) return;
     state.expanded = true;
+    state.resting = false;
     el.shell.classList.add("expanded");
+    el.shell.classList.remove("resting");
     api().expand();
   }
 
@@ -355,9 +375,11 @@
       }
     }
 
-    el.always.disabled = event.risk === "high";
-    el.always.title = event.risk === "high"
-      ? "High-risk actions are always asked one at a time"
+    const oneAtATime = event.risk === "high" || INPUT_CONTROL.has(event.tool);
+    el.always.hidden = INPUT_CONTROL.has(event.tool);
+    el.always.disabled = oneAtATime;
+    el.always.title = oneAtATime
+      ? "This is confirmed every time, one action at a time"
       : "Allow this kind of action for the rest of the session";
 
     el.sheet.hidden = true;
@@ -465,13 +487,34 @@
 
   async function submit() {
     const text = el.input.value.trim();
+    if (!text) return;
+
     const tab = state.tabs.get(state.active);
-    if (!text || !tab || tab.busy) return;
+
+    // Boot is not instant. Typing during it used to hit `return` here and the
+    // message just vanished, which looked exactly like a broken app.
+    if (!tab) {
+      state.queued = text;
+      el.input.value = "";
+      autoGrow();
+      toast("starting up…");
+      return;
+    }
+    if (tab.busy) { toast("still working — press stop first"); return; }
+
     el.input.value = "";
     autoGrow();
     expand();
     const result = await api().send(tab.id, text);
     if (result && result.error) toast(result.error, "error");
+  }
+
+  function flushQueued() {
+    if (!state.queued) return;
+    const text = state.queued;
+    state.queued = "";
+    el.input.value = text;
+    submit();
   }
 
   async function cycleMode() {
@@ -503,6 +546,7 @@
     plan: (tab, event) => { tab.plan = event.steps; if (tab.id === state.active) renderPlan(tab); },
     approval: (tab, event) => { endStream(tab); showApproval(event); },
     focus: () => el.input.focus(),
+    shape: (tab, event) => applyShape(event.resting),
     status: (tab, event) => {
       tab.busy = !!event.busy;
       if (event.title) tab.title = event.title;
@@ -527,12 +571,21 @@
     table: (tab, event) => addNotice(tab, { level: "info", text: event.title }),
   };
 
+  // Some events belong to the window rather than to a conversation, and must
+  // not be dropped just because the tab list has not been populated yet.
+  const WINDOW_EVENTS = new Set(["shape", "focus"]);
+
   window.vigil = {
     receive(event) {
-      const tab = state.tabs.get(event.tab);
-      if (!tab) return;
       const handler = handlers[event.type];
-      if (handler) handler(tab, event);
+      if (!handler) return;
+
+      if (WINDOW_EVENTS.has(event.type)) {
+        handler(null, event);
+        return;
+      }
+      const tab = state.tabs.get(event.tab);
+      if (tab) handler(tab, event);
     },
   };
 
@@ -566,7 +619,11 @@
     if (event.target === el.scrim && !state.pending) closeSheet();
   });
 
-  el.input.addEventListener("input", autoGrow);
+  el.input.addEventListener("input", () => {
+    autoGrow();
+    // tell Python whether there is something worth keeping the bar open for
+    api().hold(!!el.input.value.trim());
+  });
   el.input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); }
   });
@@ -592,13 +649,17 @@
       const key = event.key.toLowerCase();
       if (key === "y") { event.preventDefault(); answer("yes"); }
       if (key === "n" || event.key === "Escape") { event.preventDefault(); answer("no"); }
-      if (key === "a" && !el.always.disabled) { event.preventDefault(); answer("always"); }
+      if (key === "a" && !el.always.disabled && !el.always.hidden) {
+        event.preventDefault();
+        answer("always");
+      }
       return;
     }
     if (event.key === "Escape") {
       event.preventDefault();
       if (!el.sheet.hidden) closeSheet();
       else if (state.expanded) collapse();
+      else if (!state.resting) { el.input.value = ""; autoGrow(); api().hold(false); api().rest(); }
       else api().hide_window();
       return;
     }
@@ -636,11 +697,11 @@
       setBusy(false);
     }
     if (initial.warning) toast(initial.warning, "error");
+    flushQueued();
     el.input.placeholder = initial.hotkey
       ? "Ask Vigil anything…   (Ctrl+Shift+Space)"
       : "Ask Vigil anything…";
     requestAnimationFrame(autoGrow);
-    el.input.focus();
   }
 
   if (window.pywebview && window.pywebview.api) boot();

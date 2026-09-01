@@ -19,6 +19,8 @@ WEB = ROOT / "vigil" / "desktop" / "web"
 DOCS = ROOT / "docs"
 PORT = 8911
 
+PILL_WIDTH = 208
+PILL_HEIGHT = 46
 BAR_WIDTH = 720
 BAR_HEIGHT = 68
 PANEL_HEIGHT = 620
@@ -44,6 +46,8 @@ MOCK = """
   }};
 
   window.addEventListener("load", () => setTimeout(() => {
+    if (location.search.includes("pill")) return;   // leave it resting
+    document.getElementById("shell").classList.remove("resting");
     if (location.search.includes("bar")) {
       document.getElementById("input").value = "sort my screenshots by month";
       document.getElementById("input").dispatchEvent(new Event("input"));
@@ -117,6 +121,7 @@ def main() -> None:
         ("screenshot.png", "", PANEL_HEIGHT),
         ("approval.png", "?approval=1", PANEL_HEIGHT),
         ("bar.png", "?bar=1", BAR_HEIGHT),
+        ("pill.png", "?pill=1", PILL_HEIGHT),
     ]
 
     try:
@@ -134,7 +139,8 @@ def main() -> None:
                 # centre the shell in the padded viewport so the shadow is visible
                 page.add_style_tag(content=(
                     "body{display:grid;place-items:center;height:100vh}"
-                    ".shell{width:" + str(BAR_WIDTH) + "px;height:" + str(height) + "px}"
+                    ".shell{width:" + str(PILL_WIDTH if name == "pill.png" else BAR_WIDTH)
+                    + "px;height:" + str(height) + "px}"
                 ))
                 page.wait_for_timeout(1300)
                 page.screenshot(path=str(DOCS / name))

@@ -22,10 +22,11 @@ SCALE = 8
 SIZE = 256
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
-# Warm, matte, no blue anywhere.
-PLATE = (31, 30, 29)          # #1F1E1D
+# Near-black plate, chrome mark. No colour anywhere: the light in this mark
+# is a highlight, not a hue.
+PLATE = (6, 6, 7)             # #060607
 PLATE_EDGE = (255, 255, 255)  # hairline, applied at low alpha
-CORAL = (217, 119, 87)        # #D97757
+CHROME = (236, 236, 239)      # #ECECEF
 
 
 def _caret(draw, canvas: int, colour, weight: float, span: float, top: float, bottom: float):
@@ -63,31 +64,31 @@ def build_icon(size: int = SIZE) -> Image.Image:
     ImageDraw.Draw(edge).rounded_rectangle(
         [0, 0, canvas - 1, canvas - 1],
         radius=radius,
-        outline=PLATE_EDGE + (26,),
+        outline=PLATE_EDGE + (46,),
         width=max(1, int(canvas * 0.006)),
     )
     image = Image.alpha_composite(image, edge)
     draw = ImageDraw.Draw(image)
 
-    _caret(draw, canvas, CORAL + (255,), weight=0.082, span=0.212, top=0.318, bottom=0.700)
+    _caret(draw, canvas, CHROME + (255,), weight=0.082, span=0.212, top=0.318, bottom=0.700)
 
     # the eye, sitting in the opening of the caret rather than under it -
     # below the apex it reads as an upside-down exclamation mark
     dot = canvas * 0.048
     centre = canvas / 2
     baseline = canvas * 0.452
-    draw.ellipse([centre - dot, baseline - dot, centre + dot, baseline + dot], fill=CORAL + (255,))
+    draw.ellipse([centre - dot, baseline - dot, centre + dot, baseline + dot], fill=CHROME + (255,))
 
     return image.resize((size, size), Image.LANCZOS)
 
 
 LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <rect width="256" height="256" rx="58" fill="#1F1E1D"/>
+  <rect width="256" height="256" rx="58" fill="#060607"/>
   <rect x="1" y="1" width="254" height="254" rx="57" fill="none"
-        stroke="#ffffff" stroke-opacity=".10" stroke-width="1.5"/>
-  <path d="M73.7 81.4 L128 179.2 L182.3 81.4" fill="none" stroke="#D97757"
+        stroke="#ffffff" stroke-opacity=".18" stroke-width="1.5"/>
+  <path d="M73.7 81.4 L128 179.2 L182.3 81.4" fill="none" stroke="#ECECEF"
         stroke-width="21" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="128" cy="115.7" r="12.3" fill="#D97757"/>
+  <circle cx="128" cy="115.7" r="12.3" fill="#ECECEF"/>
 </svg>
 """
 

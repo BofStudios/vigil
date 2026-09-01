@@ -169,6 +169,26 @@ SECRET_PATTERNS = [
 ]
 
 
+# --------------------------------------------------------------------------
+# 5) ALWAYS ASK - taking the mouse, the keyboard or the screen.
+#
+# Everything else can be waved through by `auto` or `yolo`. These cannot: when
+# something else is driving your pointer and typing on your behalf, a standing
+# permission is not consent, it is a blank cheque. So they are asked every
+# single time, no mode skips them, and "always allow" is not offered.
+# --------------------------------------------------------------------------
+ALWAYS_ASK = {
+    "mouse_click",
+    "mouse_move",
+    "mouse_scroll",
+    "click_on",
+    "keyboard_type",
+    "press_keys",
+    "screen_capture",
+    "clipboard",
+}
+
+
 @dataclass
 class Verdict:
     """Risk assessment of an action."""
@@ -301,13 +321,26 @@ class Guard:
                 "unrecoverable destruction. If it is truly needed, the user must do it themselves."
             )
 
-        # 2. Was a session-wide allowance granted?
+        # 2. Taking the pointer, the keyboard or the screen is asked every time.
+        if action.tool in ALWAYS_ASK:
+            if self.confirm is None:
+                return False, (
+                    "Control of the mouse, keyboard and screen is always confirmed, and "
+                    "there is nobody to ask in a non-interactive session."
+                )
+            answer = self.confirm(action)
+            if answer in ("yes", "always"):
+                # deliberately not remembered: "always" is not on offer here
+                return True, "user allowed this one"
+            return False, "user declined"
+
+        # 3. Was a session-wide allowance granted?
         #    Session allowances only cover MODERATE actions; every HIGH risk action is
         #    asked again no matter what was approved before.
         if risk <= Risk.MODERATE and action.signature in self.session_allow:
             return True, "approved for this session"
 
-        # 3. Mode-based auto-approval.
+        # 4. Mode-based auto-approval.
         if risk is Risk.SAFE:
             return True, "safe action"
         if self.mode == "yolo":
@@ -315,7 +348,7 @@ class Guard:
         if self.mode == "auto" and risk is Risk.MODERATE:
             return True, "auto mode (moderate risk)"
 
-        # 4. Ask the user.
+        # 5. Ask the user.
         if self.confirm is None:
             return False, "no approval possible in a non-interactive session"
 
@@ -414,4 +447,12 @@ def _signature_of(command: str) -> str:
     return tokens[0] if tokens else "?"
 
 
-__all__ = ["Risk", "Verdict", "Action", "Guard", "classify_command", "classify_path"]
+__all__ = [
+    "ALWAYS_ASK",
+    "Action",
+    "Guard",
+    "Risk",
+    "Verdict",
+    "classify_command",
+    "classify_path",
+]

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import os
 import queue
 import sys
 import threading
@@ -30,10 +31,24 @@ ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 ICON = ASSETS_DIR / "vigil.ico"
 
 WINDOW_TITLE = "Vigil"
+# Three shapes: a pill that sits out of the way, the bar you type into, and
+# the panel the work appears in.
+PILL_WIDTH = 208
+PILL_HEIGHT = 46
 BAR_WIDTH = 720
 BAR_HEIGHT = 68
 PANEL_HEIGHT = 620
 TOP_MARGIN = 14
+
+# How close the pointer has to get before the pill opens, and how far it has
+# to leave before it folds again. The gap between the two stops the bar
+# flickering when the pointer rests on the boundary.
+REACH_IN = 8
+REACH_OUT = 90
+WATCH_INTERVAL = 0.06
+
+# set VIGIL_DEBUG_POINTER=1 to watch the hover logic decide
+_POINTER_DEBUG = bool(os.environ.get("VIGIL_DEBUG_POINTER"))
 BACKGROUND = "#1F1E1D"  # matches --bg in the stylesheet
 
 _tab_ids = itertools.count(1)
@@ -64,7 +79,12 @@ class Api:
         self.hwnd = None
         self.sessions: dict = {}
         self.expanded = False
+        self.resting = True
+        # set by the front end while there is text in the box, so the bar
+        # does not fold away over something half-typed
+        self.holding = False
         self.visible = True
+        self.screen_width = native.screen_size()[0]
         self._outbox: queue.Queue = queue.Queue()
         self._ready = threading.Event()
         self._resizing = threading.Lock()
@@ -115,44 +135,82 @@ class Api:
         it comes out at min_size - but resize() sets the viewport exactly, so one
         call after boot puts things right.
         """
-        target = PANEL_HEIGHT if self.expanded else BAR_HEIGHT
+        if self.expanded:
+            width, height = BAR_WIDTH, PANEL_HEIGHT
+        elif self.resting:
+            width, height = PILL_WIDTH, PILL_HEIGHT
+        else:
+            width, height = BAR_WIDTH, BAR_HEIGHT
         try:
-            self.window.resize(BAR_WIDTH, target)
+            self.window.resize(width, height)
+            self.window.move(max(0, (self.screen_width - width) // 2), TOP_MARGIN)
         except Exception:
             return {"ok": False}
-        return {"ok": True, "height": target}
+        return {"ok": True, "width": width, "height": height}
 
     # --------------------------------------------------------------- window
-    def _animate_height(self, target: int, duration: float = 0.16) -> None:
-        """Grow or shrink the window. Stepping it reads as motion rather than a jump."""
+    def _animate_to(self, width: int, height: int, duration: float = 0.2) -> None:
+        """Grow or shrink the window. Stepping it reads as motion rather than a jump.
+
+        The window stays centred horizontally while it changes width, otherwise
+        it would appear to slide sideways as it grows.
+        """
         if self.window is None:
             return
         with self._resizing:
             try:
-                start = int(self.window.height)
+                start_w = int(self.window.width)
+                start_h = int(self.window.height)
             except Exception:
-                start = BAR_HEIGHT
-            if start == target:
+                start_w, start_h = BAR_WIDTH, BAR_HEIGHT
+            if (start_w, start_h) == (width, height):
                 return
-            steps = 12
+
+            steps = 14
             for index in range(1, steps + 1):
-                height = round(start + (target - start) * _ease_out(index / steps))
+                progress = _ease_out(index / steps)
+                current_w = round(start_w + (width - start_w) * progress)
+                current_h = round(start_h + (height - start_h) * progress)
                 try:
-                    self.window.resize(BAR_WIDTH, height)
+                    self.window.resize(current_w, current_h)
+                    if current_w != start_w:
+                        self.window.move(max(0, (self.screen_width - current_w) // 2), TOP_MARGIN)
                 except Exception:
                     return
                 time.sleep(duration / steps)
 
+    def _shape(self, width: int, height: int) -> None:
+        threading.Thread(target=self._animate_to, args=(width, height), daemon=True).start()
+
+    def rest(self) -> dict:
+        """Shrink back to the pill - only when there is nothing going on."""
+        if self.expanded or self.resting:
+            return {"resting": self.resting}
+        self.resting = True
+        self._shape(PILL_WIDTH, PILL_HEIGHT)
+        self.emit({"type": "shape", "tab": self._first_tab(), "resting": True})
+        return {"resting": True}
+
+    def peek(self) -> dict:
+        """Open out to the full bar, for a pointer arriving or a hot key."""
+        if self.expanded or not self.resting:
+            return {"resting": False}
+        self.resting = False
+        self._shape(BAR_WIDTH, BAR_HEIGHT)
+        self.emit({"type": "shape", "tab": self._first_tab(), "resting": False})
+        return {"resting": False}
+
     def expand(self) -> dict:
         if not self.expanded:
             self.expanded = True
-            threading.Thread(target=self._animate_height, args=(PANEL_HEIGHT,), daemon=True).start()
+            self.resting = False
+            self._shape(BAR_WIDTH, PANEL_HEIGHT)
         return {"expanded": True}
 
     def collapse(self) -> dict:
         if self.expanded:
             self.expanded = False
-            threading.Thread(target=self._animate_height, args=(BAR_HEIGHT,), daemon=True).start()
+            self._shape(BAR_WIDTH, BAR_HEIGHT)
         return {"expanded": False}
 
     def hide_window(self) -> dict:
@@ -175,7 +233,19 @@ class Api:
         return {"visible": True}
 
     def toggle_window(self) -> None:
-        self.hide_window() if self.visible else self.show_window()
+        if self.visible and not self.resting:
+            self.hide_window()
+            return
+        self.show_window()
+        self.peek()
+
+    def busy_anywhere(self) -> bool:
+        return any(session.busy for session in self.sessions.values())
+
+    def hold(self, holding: bool) -> dict:
+        """The front end tells us when the box has something in it."""
+        self.holding = bool(holding)
+        return {"holding": self.holding}
 
     def _first_tab(self) -> str:
         return next(iter(self.sessions), "")
@@ -207,9 +277,9 @@ class Api:
 
     # -------------------------------------------------------------- talking
     def send(self, tab_id: str, text: str) -> dict:
-        session = self.sessions.get(tab_id)
+        session = self.sessions.get(tab_id) or next(iter(self.sessions.values()), None)
         if session is None:
-            return {"error": "no such tab"}
+            return {"error": "still starting up - try again in a moment"}
         if session.busy:
             return {"error": "still working"}
         self.expand()
@@ -301,6 +371,46 @@ class Api:
             pass
 
 
+def _watch_pointer(api: Api) -> None:
+    """Open the pill when the pointer arrives, fold it when the pointer leaves.
+
+    The web layer's own mouseenter never fired reliably for this window, and
+    polling the cursor is both dependable and closer to what we want anyway:
+    the bar can react to the pointer approaching, not just landing on it.
+    """
+    while True:
+        time.sleep(WATCH_INTERVAL)
+        if not api.visible or api.expanded or api.window is None:
+            continue
+
+        point = native.cursor_position()
+        rect = native.window_rect(api.hwnd)
+        if rect is None:
+            # the handle went stale - find the window again rather than
+            # silently giving up on hover for the rest of the session
+            api.hwnd = native.find_window(WINDOW_TITLE)
+            rect = native.window_rect(api.hwnd)
+        if point is None or rect is None:
+            continue
+
+        left, top, right, bottom = rect
+        x, y = point
+
+        if _POINTER_DEBUG:
+            print("pointer", (x, y), "rect", rect, "resting", api.resting, flush=True)
+
+        if api.resting:
+            near = (left - REACH_IN <= x <= right + REACH_IN
+                    and top - REACH_IN <= y <= bottom + REACH_IN)
+            if near:
+                api.peek()
+        else:
+            gone = not (left - REACH_OUT <= x <= right + REACH_OUT
+                        and top - REACH_OUT <= y <= bottom + REACH_OUT)
+            if gone and not api.holding and not api.busy_anywhere():
+                api.rest()
+
+
 def _polish_window(api: Api) -> None:
     """Find the window, apply what the platform offers, then size it correctly.
 
@@ -335,14 +445,20 @@ def run(config: Config = None, debug: bool = False) -> int:
     screen_width, _ = native.screen_size()
     api = Api(config)
 
+    # Loading the tool registry pulls in Playwright and friends, which takes a
+    # few seconds. Doing it here rather than on the front end's first call means
+    # the bar is usable the moment it appears instead of silently swallowing
+    # whatever gets typed into it first.
+    api.new_tab()
+
     options = {
         "js_api": api,
-        "width": BAR_WIDTH,
-        "height": BAR_HEIGHT,
+        "width": PILL_WIDTH,
+        "height": PILL_HEIGHT,
         # the default minimum is (200, 100), which silently makes the collapsed
         # bar a third taller than it should be
-        "min_size": (420, 40),
-        "x": max(0, (screen_width - BAR_WIDTH) // 2),
+        "min_size": (180, 40),
+        "x": max(0, (screen_width - PILL_WIDTH) // 2),
         "y": TOP_MARGIN,
         "frameless": True,
         "easy_drag": False,  # only the grip drags; see .drag-region in the CSS
@@ -355,8 +471,8 @@ def run(config: Config = None, debug: bool = False) -> int:
     if native.IS_MAC:
         # macOS draws the blur itself and rounds the corners for us
         options["vibrancy"] = True
-    else:
-        options["transparent"] = True
+    # No transparency on Windows: the surface is opaque now, and a transparent
+    # WebView2 window swallows pointer events, which stopped hover from working.
 
     window = webview.create_window(WINDOW_TITLE, str(WEB_DIR / "index.html"), **options)
     api.attach(window)
@@ -368,6 +484,7 @@ def run(config: Config = None, debug: bool = False) -> int:
     api.hotkey.start()
 
     threading.Thread(target=_polish_window, args=(api,), daemon=True).start()
+    threading.Thread(target=_watch_pointer, args=(api,), daemon=True).start()
 
     webview.start(debug=debug, icon=str(ICON) if ICON.exists() else None)
 

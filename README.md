@@ -17,6 +17,8 @@
 
 *by [BOF Studios](https://github.com/BofStudios)*
 
+<img src="docs/pill.png" alt="Vigil at rest" width="300">
+
 <img src="docs/bar.png" alt="The Vigil bar" width="760">
 
 </div>
@@ -109,12 +111,14 @@ vigil app                      # open the bar
 vigil app --install-shortcut   # put Vigil on your desktop, with its icon
 ```
 
-A pill at the top of the screen, always on top. Ask it something and it grows into a panel;
-press Escape and it shrinks back to one line. Warm, matte surfaces, hairline edges, no
-gradients — the same restraint the rest of the tool is built with.
+At rest it is a small pill at the top of the screen — a mark and a name, nothing to read.
+Move the pointer near it and it opens into the bar; ask it something and it grows into a
+panel; press Escape and it folds back. Near-black surfaces, hairline highlights, no
+gradients: light behaves like a reflection rather than a fill.
 
 <img src="docs/screenshot.png" alt="The bar expanded, mid-task" width="760">
 
+- **The pointer opens it** — no click needed; it folds away again when you leave
 - **Ctrl+Shift+Space** summons or dismisses it from anywhere
 - **Closing hides it to the tray** — a run may still be going, and it will notify you when it lands
 - **Live plan** fills in under the bar as the work happens
@@ -179,7 +183,7 @@ before it runs:
 | Level | Example | Behaviour |
 |---|---|---|
 | **safe** | `ls`, `git status`, reading files, system info | runs automatically |
-| **moderate** | writing files, creating folders, opening apps, screenshots | asks in `ask` mode |
+| **moderate** | writing files, creating folders, opening apps | asks in `ask` mode |
 | **high** | deleting, killing processes, installing packages, shutdown | always asks |
 | **blocked** | the list below | **never runs, in any mode** |
 
@@ -199,12 +203,24 @@ These do not run even with `--yolo`:
 This is tested: `tests/test_security.py` verifies that more than 30 attack variants are
 refused even in `yolo` mode.
 
+### Taking the mouse, the keyboard or the screen
+
+One category is never waved through. When something else is driving your pointer and typing on
+your behalf, a standing permission is not consent — so these are confirmed **every single time**,
+in every mode, and "always allow" is not offered for them:
+
+`mouse_click` · `mouse_move` · `mouse_scroll` · `click_on` · `keyboard_type` · `press_keys` ·
+`screen_capture` · `clipboard`
+
+That is what lets everything else get out of the way: the default mode is `auto`, so ordinary
+work — reading, writing, running commands — happens unattended.
+
 ### Approval modes
 
 ```bash
-vigil                # ask  - asks before every moderate and high risk step (default)
-vigil --mode auto    # auto - moderate runs automatically, high still asks
-vigil --yolo         # yolo - never asks (blocked actions stay blocked)
+vigil                # auto - routine work runs, high risk still asks (default)
+vigil --mode ask     # ask  - asks before every moderate and high risk step
+vigil --yolo         # yolo - never asks, except the controls above and the blocked list
 ```
 
 The approval prompt offers **y**es / **n**o / **a**lways allow (this session). "Always allow"
@@ -407,7 +423,7 @@ Settings live in `~/.vigil/config.json`.
 | `vision_model` | `qwen/qwen3.8-27b` | Groq vision model |
 | `ollama_host` | `http://localhost:11434` | Ollama address |
 | `ollama_model` | `qwen3:8b` | Ollama main model |
-| `approval_mode` | `ask` | `ask` / `auto` / `yolo` |
+| `approval_mode` | `auto` | `ask` / `auto` / `yolo` |
 | `max_steps` | `40` | max tool steps per request |
 | `max_tool_output` | `12000` | character cap on tool output |
 | `enable_gui` · `enable_browser` | `true` | toggle tool groups |
@@ -445,7 +461,7 @@ vigil config set protect_paths "C:/Users/Pc/Private,D:/Backup"
 ```bash
 pip install -e ".[all,dev]"
 ruff check .
-pytest -q          # 152 tests
+pytest -q          # 168 tests
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the design,

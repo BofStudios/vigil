@@ -70,13 +70,39 @@ def supports_rounding() -> bool:
     return _windows_build() >= 22000
 
 
-def find_window(title: str):
-    """Find a top-level window by exact title. Returns an HWND or None."""
+def find_window(title: str, visible_only: bool = True):
+    """Find a top-level window by exact title. Returns an HWND or None.
+
+    A toolkit can leave short-lived helper windows under the same title, and
+    holding on to one of those means every later call against the handle fails
+    once it is destroyed. Preferring a visible window avoids that.
+    """
     if not IS_WINDOWS:
         return None
     try:
-        handle = ctypes.windll.user32.FindWindowW(None, title)
-        return handle or None
+        user32 = ctypes.windll.user32
+        handle = user32.FindWindowW(None, title)
+        if not handle:
+            return None
+        if visible_only and not user32.IsWindowVisible(wintypes.HWND(handle)):
+            # walk the rest of the windows with this title
+            found = []
+
+            @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+            def collect(hwnd, _param):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length:
+                    buffer = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buffer, length + 1)
+                    if buffer.value == title and user32.IsWindowVisible(hwnd):
+                        found.append(hwnd)
+                        return False
+                return True
+
+            user32.EnumWindows(collect, 0)
+            if found:
+                return found[0]
+        return handle
     except Exception:
         return None
 
@@ -154,6 +180,38 @@ def screen_size() -> tuple:
             return monitor["width"], monitor["height"]
     except Exception:
         return 1920, 1080
+
+
+def cursor_position():
+    """Where the pointer is, in screen pixels. None when it cannot be read."""
+    if IS_WINDOWS:
+        try:
+            point = wintypes.POINT()
+            if ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
+                return point.x, point.y
+        except Exception:
+            return None
+        return None
+    try:
+        import pyautogui
+
+        position = pyautogui.position()
+        return int(position.x), int(position.y)
+    except Exception:
+        return None
+
+
+def window_rect(hwnd):
+    """(left, top, right, bottom) of a window, or None."""
+    if not IS_WINDOWS or not hwnd:
+        return None
+    try:
+        box = wintypes.RECT()
+        if ctypes.windll.user32.GetWindowRect(wintypes.HWND(hwnd), ctypes.byref(box)):
+            return box.left, box.top, box.right, box.bottom
+    except Exception:
+        return None
+    return None
 
 
 def flash_focus(hwnd) -> None:
