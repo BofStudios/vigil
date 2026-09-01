@@ -25,6 +25,8 @@ from ..providers import ProviderError, build_provider, provider_notes
 from . import native
 from .session import Session
 from .tray import Tray
+from .voice import PushToTalk, Recorder
+from .voice import available as voice_available
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
@@ -76,6 +78,9 @@ class Api:
         self.window = None
         self.tray = None
         self.hotkey = None
+        self.talk = None
+        self.recorder = None
+        self.listening = False
         self.hwnd = None
         self.sessions: dict = {}
         self.expanded = False
@@ -125,6 +130,8 @@ class Api:
             "warning": provider_notes(self.config),
             "hotkey": bool(self.hotkey and self.hotkey.registered),
             "tray": bool(self.tray and self.tray.available),
+            "voice": bool(self.talk and self.talk.listening),
+            "voice_key": self.config.voice_key,
             "tabs": [session.describe() for session in self.sessions.values()],
         }
 
@@ -303,6 +310,57 @@ class Api:
         if not self.visible and self.tray is not None:
             self.tray.notify(title or "Finished.", "Vigil")
 
+    # ----------------------------------------------------------------- voice
+    def start_listening(self) -> None:
+        """The talk key went down."""
+        if self.recorder is None or self.listening:
+            return
+        try:
+            self.recorder.start()
+        except Exception as exc:
+            self.emit({"type": "voice", "tab": self._first_tab(),
+                       "state": "error", "text": str(exc)})
+            return
+
+        self.listening = True
+        self.show_window()
+        self.peek()
+        self.emit({"type": "voice", "tab": self._first_tab(), "state": "listening"})
+
+    def stop_listening(self) -> None:
+        """The talk key came up: transcribe on a worker so the key stays responsive."""
+        if self.recorder is None or not self.listening:
+            return
+        self.listening = False
+        audio = self.recorder.stop()
+
+        if not audio:
+            self.emit({"type": "voice", "tab": self._first_tab(), "state": "idle"})
+            return
+
+        self.emit({"type": "voice", "tab": self._first_tab(), "state": "thinking"})
+        threading.Thread(target=self._transcribe, args=(audio,), daemon=True).start()
+
+    def _transcribe(self, audio: bytes) -> None:
+        tab = self._first_tab()
+        session = self.sessions.get(tab)
+        provider = session.agent.provider if session else None
+        if provider is None:
+            self.emit({"type": "voice", "tab": tab, "state": "error", "text": "no provider"})
+            return
+        try:
+            text = provider.transcribe(audio, language=self.config.voice_language)
+        except Exception as exc:
+            self.emit({"type": "voice", "tab": tab, "state": "error", "text": str(exc)})
+            return
+
+        text = (text or "").strip()
+        # Whisper answers a silent clip with a lone full stop
+        if not text or text in (".", "...", "Thank you."):
+            self.emit({"type": "voice", "tab": tab, "state": "idle"})
+            return
+        self.emit({"type": "voice", "tab": tab, "state": "text", "text": text})
+
     # -------------------------------------------------------------- settings
     def set_mode(self, mode: str) -> dict:
         try:
@@ -361,6 +419,10 @@ class Api:
     def quit(self) -> None:
         for session in list(self.sessions.values()):
             session.close()
+        if self.talk is not None:
+            self.talk.stop()
+        if self.recorder is not None:
+            self.recorder.cancel()
         if self.hotkey is not None:
             self.hotkey.stop()
         if self.tray is not None:
@@ -483,11 +545,25 @@ def run(config: Config = None, debug: bool = False) -> int:
     api.hotkey = native.HotKey(api.toggle_window)
     api.hotkey.start()
 
+    if config.enable_voice:
+        ok, reason = voice_available()
+        if ok:
+            api.recorder = Recorder()
+            api.talk = PushToTalk(config.voice_key, api.start_listening, api.stop_listening)
+            started, why = api.talk.start()
+            if not started:
+                api.talk = None
+                print("vigil: push to talk is off -", why)
+        else:
+            print("vigil: push to talk is off -", reason)
+
     threading.Thread(target=_polish_window, args=(api,), daemon=True).start()
     threading.Thread(target=_watch_pointer, args=(api,), daemon=True).start()
 
     webview.start(debug=debug, icon=str(ICON) if ICON.exists() else None)
 
+    if api.talk is not None:
+        api.talk.stop()
     if api.hotkey is not None:
         api.hotkey.stop()
     if api.tray is not None:

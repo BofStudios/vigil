@@ -23,6 +23,7 @@
     chipTools: $("chip-tools"), tokens: $("chip-tokens"), newTab: $("btn-new"),
     modelLabel: $("model-label"), cwdLabel: $("cwd-label"), toolsLabel: $("tools-label"),
     close: $("win-close"), toasts: $("toasts"),
+    voiceHint: $("voice-hint"), voiceText: $("voice-text"),
   };
 
   const MODES = ["ask", "auto", "yolo"];
@@ -463,6 +464,41 @@
     });
   }
 
+  // ---------------------------------------------------------------- voice
+  function applyVoice(event) {
+    const listening = event.state === "listening";
+    const thinking = event.state === "thinking";
+
+    el.shell.classList.toggle("listening", listening);
+    el.shell.classList.toggle("thinking", thinking);
+    el.voiceHint.hidden = !(listening || thinking);
+    el.pulse.hidden = !listening;
+
+    if (listening) {
+      el.voiceText.textContent = "Listening";
+      return;
+    }
+    if (thinking) {
+      el.voiceText.textContent = "Transcribing";
+      return;
+    }
+    if (event.state === "text" && event.text) {
+      // drop the words in the box rather than sending them: speech is easy to
+      // misrecognise, and this app acts on what it is told
+      el.input.value = el.input.value.trim()
+        ? el.input.value.trim() + " " + event.text
+        : event.text;
+      autoGrow();
+      api().hold(true);
+      el.input.focus();
+      el.input.setSelectionRange(el.input.value.length, el.input.value.length);
+      return;
+    }
+    if (event.state === "error") {
+      toast(event.text || "could not hear that", "error");
+    }
+  }
+
   // ------------------------------------------------------------- composer
   function setBusy(busy) {
     el.send.hidden = busy;
@@ -546,6 +582,7 @@
     plan: (tab, event) => { tab.plan = event.steps; if (tab.id === state.active) renderPlan(tab); },
     approval: (tab, event) => { endStream(tab); showApproval(event); },
     focus: () => el.input.focus(),
+    voice: (_tab, event) => applyVoice(event),
     shape: (tab, event) => applyShape(event.resting),
     status: (tab, event) => {
       tab.busy = !!event.busy;
@@ -573,7 +610,7 @@
 
   // Some events belong to the window rather than to a conversation, and must
   // not be dropped just because the tab list has not been populated yet.
-  const WINDOW_EVENTS = new Set(["shape", "focus"]);
+  const WINDOW_EVENTS = new Set(["shape", "focus", "voice"]);
 
   window.vigil = {
     receive(event) {
@@ -698,8 +735,11 @@
     }
     if (initial.warning) toast(initial.warning, "error");
     flushQueued();
-    el.input.placeholder = initial.hotkey
-      ? "Ask Vigil anything…   (Ctrl+Shift+Space)"
+    const hints = [];
+    if (initial.hotkey) hints.push("Ctrl+Shift+Space");
+    if (initial.voice) hints.push("hold " + (initial.voice_key || "right ctrl") + " to talk");
+    el.input.placeholder = hints.length
+      ? "Ask Vigil anything…   (" + hints.join(" · ") + ")"
       : "Ask Vigil anything…";
     requestAnimationFrame(autoGrow);
   }

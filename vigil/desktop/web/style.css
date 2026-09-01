@@ -219,6 +219,43 @@ html, body {
 /* the pill is a smaller object, so its corners are smaller too */
 .resting.shell { border-radius: 23px; }
 
+/* --------------------------------------------------------------- voice */
+/* While the talk key is held the bar says so plainly. A microphone that is
+   open without a visible sign is the thing people are right to distrust. */
+.voice-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  font-size: 14px;
+  color: var(--text);
+  animation: arrive .3s var(--flow) both;
+}
+.listening #input, .thinking #input { display: none; }
+.listening .pill-hint, .thinking .pill-hint { display: none; }
+
+.levels { display: flex; align-items: center; gap: 3px; height: 18px; }
+.levels i {
+  width: 3px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: level 1s var(--flow) infinite;
+}
+.levels i:nth-child(2) { animation-delay: .12s; }
+.levels i:nth-child(3) { animation-delay: .24s; }
+.levels i:nth-child(4) { animation-delay: .36s; }
+@keyframes level {
+  0%, 100% { height: 5px; opacity: .5; }
+  50%      { height: 17px; opacity: 1; }
+}
+
+/* transcribing: the bars hold still and dim, so the two states never read alike */
+.thinking .levels i { animation: none; height: 9px; opacity: .35; }
+.thinking .voice-hint { color: var(--text-dim); }
+
+.listening .mark { color: var(--accent); }
+
 /* ----------------------------------------------------------------- panel */
 .panel {
   flex: 1 1 auto;

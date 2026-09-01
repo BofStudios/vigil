@@ -84,6 +84,10 @@ class Provider(ABC):
     def vision(self, prompt: str, image_b64: str, model: Optional[str] = None) -> str:
         """Analyse an image and return a text description."""
 
+    def transcribe(self, audio: bytes, filename: str = "speech.wav", language: str = "en") -> str:
+        """Turn spoken audio into text. Providers that cannot should raise."""
+        raise ProviderError("This provider cannot transcribe audio.")
+
     def list_models(self) -> list:
         """Available model ids. Empty list when unsupported."""
         return []

@@ -39,6 +39,9 @@ VISION_HINTS = ("qwen3.8", "scout", "maverick", "vision", "llava", "-vl")
 # Models that cannot call tools - the user is warned when one is selected.
 NO_TOOL_MODELS = {"groq/compound", "groq/compound-mini", "allam-2-7b"}
 
+# Speech to text. Turbo is the one to use: same accuracy, a fraction of the wait.
+SPEECH_MODEL = "whisper-large-v3-turbo"
+
 
 class GroqProvider(Provider):
     name = "groq"
@@ -222,6 +225,28 @@ class GroqProvider(Provider):
             raise self._translate(exc) from exc
         self.request_count += 1
         return response.choices[0].message.content or ""
+
+    # ------------------------------------------------------------------
+    # speech
+    # ------------------------------------------------------------------
+    def transcribe(self, audio: bytes, filename: str = "speech.wav", language: str = "en") -> str:
+        """Send recorded audio to Whisper and get the words back."""
+        if not audio:
+            return ""
+        try:
+            response = self._client.audio.transcriptions.create(
+                file=(filename, audio),
+                model=SPEECH_MODEL,
+                language=language or None,
+                response_format="text",
+                temperature=0,
+            )
+        except Exception as exc:
+            raise self._translate(exc) from exc
+        self.request_count += 1
+        # response_format="text" gives a bare string, but the SDK has returned an
+        # object with .text in the past; accept either.
+        return (response if isinstance(response, str) else getattr(response, "text", "")).strip()
 
     # ------------------------------------------------------------------
     # models

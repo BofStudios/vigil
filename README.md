@@ -57,6 +57,7 @@ no subscription.
 |---|---|
 | **Always a keystroke away** | Ctrl+Shift+Space summons the bar over whatever you are doing. It runs from the tray. |
 | **It can use the mouse** | Describe a button and it finds it on screen and clicks it — any app, not just the terminal. |
+| **Hold a key and talk** | Speech goes to Whisper and lands in the box as text. The mic is only ever open while you hold the key. |
 | **Free** | Groq's free tier is enough, and the key takes 30 seconds to get. Or stay entirely offline with Ollama. |
 | **Safe** | Every risky step is put to you for approval. Some actions never run, in any mode. |
 | **Transparent** | You see each step as it happens, and every decision is written to an audit log. |
@@ -87,7 +88,8 @@ pip install "vigil-cli[all]"
 playwright install chromium
 ```
 
-Individual extras are `[desktop]`, `[gui]` and `[browser]` if you want a smaller install.
+Individual extras are `[desktop]`, `[gui]`, `[browser]` and `[voice]` if you want a
+smaller install.
 
 ### Free API key
 
@@ -259,6 +261,30 @@ warning automatically.
 | **planning** | `create_plan`, `update_plan`, `show_plan` |
 
 Groups whose dependencies are missing switch themselves off — Vigil keeps working with the rest.
+
+---
+
+## Talking to it
+
+Hold **right ctrl**, say what you want, let go. The words appear in the box; you press Enter.
+
+```bash
+pip install "vigil-cli[voice]"
+```
+
+- The microphone is open **only while the key is held** — never before, never after. There is no
+  wake word, and nothing is written to disk: the clip lives in memory for one request.
+- Transcription is Groq's Whisper, which is free on the same key as everything else.
+- The transcript is **put in the box, not sent**. Speech is easy to misrecognise and this
+  program acts on what it is told, so the last step stays yours.
+- The bar shows that it is listening while the key is down. A microphone that is open without a
+  visible sign is exactly the thing people are right to distrust.
+
+```bash
+vigil config set voice_key "f9"        # right ctrl · left ctrl · right alt · right shift · f8-f10
+vigil config set voice_language "en"   # Whisper is far more accurate with the hint
+vigil config set enable_voice false    # off entirely
+```
 
 ---
 
@@ -461,7 +487,7 @@ vigil config set protect_paths "C:/Users/Pc/Private,D:/Backup"
 ```bash
 pip install -e ".[all,dev]"
 ruff check .
-pytest -q          # 168 tests
+pytest -q          # 182 tests
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the design,
@@ -481,6 +507,7 @@ See [docs/architecture.md](docs/architecture.md) for the design,
 - [x] Desktop bar: global hot key, tray, live plan
 - [x] macOS support
 - [x] Click anything on screen by describing it
+- [x] Push to talk, transcribed by Whisper
 - [x] Task planner: a visible checklist for multi-step jobs
 - [ ] Scheduled tasks (`vigil schedule`)
 - [ ] More providers: Gemini, OpenRouter
