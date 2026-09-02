@@ -59,6 +59,7 @@ no subscription.
 | **It can use the mouse** | Describe a button and it finds it on screen and clicks it — any app, not just the terminal. A light frames your screen while it does. |
 | **Two ways of thinking** | Direct follows your instruction; Autonomous is given a problem and works out the route. You pick, like picking a model. |
 | **Circle and ask** | Ctrl+Shift+A, draw around anything on screen, and it tells you what it is. |
+| **Recall and paste** | Up walks back through what you asked before. Copy a file in Explorer, paste it in, and it has the path. |
 | **Hold a key and talk** | Speech goes to Whisper and lands in the box as text. The mic is only ever open while you hold the key. |
 | **Free** | Groq's free tier is enough, and the key takes 30 seconds to get. Or stay entirely offline with Ollama. |
 | **Safe** | Every risky step is put to you for approval. Some actions never run, in any mode. |
@@ -111,8 +112,9 @@ working directory.
 ## The bar
 
 ```bash
-vigil app                      # open the bar
-vigil app --install-shortcut   # put Vigil on your desktop, with its icon
+vigil app                        # open the bar
+vigil app --install-shortcut     # put Vigil on your desktop, with its icon
+vigil app --autostart on         # and start it when you log in
 ```
 
 At rest it is a small pill at the top of the screen — a mark and a name, nothing to read.
@@ -129,8 +131,17 @@ gradients: light behaves like a reflection rather than a fill.
 - **Approvals** stop the run and wait, with `Y` allow, `N` deny, `A` allow for the session
 - **Tabs** appear once you have more than one session: `Ctrl+T`, `Ctrl+W`, `Ctrl+1…9`
 - **Chips** along the bottom change how it thinks, the model, working directory and approval mode
+- **Up and Down** walk back through what you have asked before, and forward again to whatever you were half-way through typing
+- **Paste** understands more than text: a picture goes to the vision model and comes back as words you can edit, and a file copied in Explorer arrives as its path
+- **One at a time** — running `vigil app` again brings the bar you already have forward instead of opening a second one
 
 <img src="docs/approval.png" alt="An approval prompt" width="760">
+
+The tray icon carries the state: green while it is working, amber while it is waiting on an
+approval you cannot see because the bar is hidden. Idle has no badge at all.
+
+Everything that moves — the light travelling along the mark, rows arriving, controls leaning
+towards the pointer — is switched off when your system asks for less movement.
 
 Runs on **Windows and macOS** (and Linux, with the same caveats as any GTK app). The window is
 [pywebview](https://pywebview.flowrl.com/) over the system WebView — WebView2 on Windows,
@@ -358,6 +369,10 @@ decoration — a bright hairline hugging a rounded frame with a short bloom behi
 once and shown instantly after that. It goes out about a second after the last action, and it
 steps aside while a screenshot is taken so it never ends up in the picture the model is shown.
 
+**Every monitor gets its own frame.** The overlay spans the whole virtual desktop, including
+screens at negative coordinates — one placed to the left of your primary one — and draws a
+frame around each. A single ring around the bounding box would leave the inner edges dark.
+
 Windows only for now: it is a layered window with per-pixel alpha, and the equivalent on macOS
 is a different piece of work. A fullscreen exclusive game draws above everything, including
 this.
@@ -575,6 +590,11 @@ See [docs/architecture.md](docs/architecture.md) for the design,
 - [x] Click anything on screen by describing it
 - [x] Push to talk, transcribed by Whisper
 - [x] Task planner: a visible checklist for multi-step jobs
+- [x] Circle a region of the screen and ask about it
+- [x] Two ways of thinking, picked like a model
+- [x] A light around the screen while it has the controls
+- [x] Starts with the machine, one instance, every monitor
+- [ ] The control light on macOS
 - [ ] Scheduled tasks (`vigil schedule`)
 - [ ] More providers: Gemini, OpenRouter
 - [ ] Optional web interface
