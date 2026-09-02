@@ -38,3 +38,30 @@ jobs:
           python -m vigil --version
           python -m vigil tools
           python -m vigil doctor
+
+      # The wheel had been unbuildable for a release without anyone noticing,
+      # because nothing here ever built one.
+      - name: build the wheel
+        run: |
+          python -m pip install build
+          python -m build --wheel --outdir dist
+
+      - name: the wheel carries the front end and the icons
+        shell: python
+        run: |
+          import glob, sys, zipfile
+
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          missing = [
+              wanted for wanted in (
+                  "vigil/assets/vigil.ico",
+                  "vigil/assets/vigil.png",
+                  "vigil/desktop/web/index.html",
+                  "vigil/desktop/web/app.js",
+                  "vigil/desktop/web/style.css",
+              )
+              if wanted not in names
+          ]
+          if missing:
+              sys.exit("missing from the wheel: " + ", ".join(missing))
+          print(len(names), "files, no duplicates" if len(names) == len(set(names)) else "DUPLICATES")

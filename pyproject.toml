@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vigil-cli"
-version = "0.6.0"
+dynamic = ["version"]
 description = "A free, terminal-native AI agent that operates your computer - with a security layer that never disables your protections."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -76,12 +76,15 @@ vigil = "vigil.cli:main"
 [project.gui-scripts]
 vigil-app = "vigil.desktop.app:main"
 
-[tool.hatch.build.targets.wheel]
-packages = ["vigil"]
+# One source of truth for the version: the package itself.
+[tool.hatch.version]
+path = "vigil/__init__.py"
 
-[tool.hatch.build.targets.wheel.force-include]
-"vigil/desktop/web" = "vigil/desktop/web"
-"vigil/assets" = "vigil/assets"
+[tool.hatch.build.targets.wheel]
+# The front end and the icons live inside the package directory, so they are
+# already carried. Forcing them in as well added every one of them twice and
+# the wheel would not build at all.
+packages = ["vigil"]
 
 [tool.ruff]
 line-length = 110
