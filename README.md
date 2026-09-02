@@ -56,7 +56,9 @@ no subscription.
 | | |
 |---|---|
 | **Always a keystroke away** | Ctrl+Shift+Space summons the bar over whatever you are doing. It runs from the tray. |
-| **It can use the mouse** | Describe a button and it finds it on screen and clicks it — any app, not just the terminal. |
+| **It can use the mouse** | Describe a button and it finds it on screen and clicks it — any app, not just the terminal. A light frames your screen while it does. |
+| **Two ways of thinking** | Direct follows your instruction; Autonomous is given a problem and works out the route. You pick, like picking a model. |
+| **Circle and ask** | Ctrl+Shift+A, draw around anything on screen, and it tells you what it is. |
 | **Hold a key and talk** | Speech goes to Whisper and lands in the box as text. The mic is only ever open while you hold the key. |
 | **Free** | Groq's free tier is enough, and the key takes 30 seconds to get. Or stay entirely offline with Ollama. |
 | **Safe** | Every risky step is put to you for approval. Some actions never run, in any mode. |
@@ -126,7 +128,7 @@ gradients: light behaves like a reflection rather than a fill.
 - **Live plan** fills in under the bar as the work happens
 - **Approvals** stop the run and wait, with `Y` allow, `N` deny, `A` allow for the session
 - **Tabs** appear once you have more than one session: `Ctrl+T`, `Ctrl+W`, `Ctrl+1…9`
-- **Chips** along the bottom change the model, working directory and approval mode
+- **Chips** along the bottom change how it thinks, the model, working directory and approval mode
 
 <img src="docs/approval.png" alt="An approval prompt" width="760">
 
@@ -138,6 +140,39 @@ The summon key uses `RegisterHotKey` on Windows and `pynput` elsewhere.
 
 The front end is one HTML file, one CSS file and one JS file — no framework, no bundler, no
 network access.
+
+---
+
+## How it thinks
+
+Two ways of working, chosen the way you would choose a model — because it is also choosing
+one. The chip in the bar's footer switches between them, or `--brain` on the command line.
+
+<img src="docs/brains.png" alt="Choosing how Vigil thinks" width="760">
+
+| | **Direct** | **Autonomous** |
+|---|---|---|
+| For | everyday jobs | problems |
+| Given | an instruction | a goal |
+| Plans | no — the planning tools are not offered | yes, and you watch it fill in |
+| Steps | at most 14 | at most 40 |
+| Model | `openai/gpt-oss-20b` | `openai/gpt-oss-120b` |
+
+**Direct** follows your instruction step by step and stops when it is done. It takes the
+shortest correct route and does not widen the job. This is the default.
+
+**Autonomous** is handed a problem rather than an instruction: it plans a route, tries things,
+and changes course when they do not work. Choosing it repeats its warning at the moment you
+turn it on — it takes many more actions on its own before it comes back to you.
+
+> **What a brain cannot change is security.** Blocked actions stay blocked, and the mouse,
+> keyboard and screen are confirmed every time in both. Autonomous is riskier because it
+> *acts* more, not because it *asks* less.
+
+```bash
+vigil --brain autonomous "work out why my laptop takes four minutes to boot"
+vigil --brain direct "rename every screenshot on my desktop to its date"
+```
 
 ---
 
@@ -156,8 +191,9 @@ vigil audit -n 30                      # recent security decisions
 vigil config set model openai/gpt-oss-120b
 ```
 
-Flags: `--provider groq|ollama`, `--model <name>`, `--mode ask|auto|yolo`, `--yolo`,
-`--cwd <path>`, `--no-gui`, `--no-browser`, `--no-stream`, `--quiet`
+Flags: `--provider groq|ollama`, `--model <name>`, `--brain direct|autonomous`,
+`--mode ask|auto|yolo`, `--yolo`, `--cwd <path>`, `--no-gui`, `--no-browser`,
+`--no-stream`, `--quiet`
 
 In-chat commands:
 
@@ -168,6 +204,7 @@ In-chat commands:
 | `/model [name]` | show or change the model |
 | `/provider [groq\|ollama]` | switch the AI provider |
 | `/mode ask\|auto\|yolo` | change the approval mode |
+| `/brain direct\|autonomous` | change how it thinks |
 | `/cwd [path]` | change the working directory |
 | `/memory` · `/plugins` | memory and plugins |
 | `/reset` · `/history` | reset or summarize the conversation |
@@ -309,8 +346,35 @@ element is, and clicks the point that comes back:
 | `list_windows` · `focus_window` | see what is open, bring one forward |
 | `mouse_click` · `mouse_move` · `mouse_scroll` | precise control when coordinates are known |
 
-Every one of these asks before it acts in `ask` mode, and the screenshot going to the model is
-called out in the prompt — whatever is on screen goes with it.
+Every one of these is confirmed every time, in every mode — see
+[Taking the mouse, the keyboard or the screen](#taking-the-mouse-the-keyboard-or-the-screen).
+The screenshot going to the model is called out in the prompt: whatever is on screen goes
+with it.
+
+### You can see when it has the controls
+
+While Vigil is driving, a white light frames your screen. It is a real overlay, not a window
+decoration — a bright hairline hugging a rounded frame with a short bloom behind it, drawn
+once and shown instantly after that. It goes out about a second after the last action, and it
+steps aside while a screenshot is taken so it never ends up in the picture the model is shown.
+
+Windows only for now: it is a layered window with per-pixel alpha, and the equivalent on macOS
+is a different piece of work. A fullscreen exclusive game draws above everything, including
+this.
+
+### Circle something and ask about it
+
+Press **Ctrl+Shift+A**, draw around anything on your screen, and let go. What you circled goes
+to the vision model, and its description goes to the agent — which can then search, open a
+page, or look the thing up, the same as for anything you type.
+
+```
+[ Ctrl+Shift+A ]  →  circle the error dialog  →  "that is a .NET 4.8 install failure; here is
+                                                  what causes it and how to fix it"
+```
+
+The picker runs in its own process. Tk wants the main thread on macOS and the web view already
+has it, so rather than two toolkits sharing one event loop, it gets a process of its own.
 
 On macOS you will be asked for **Screen Recording** and **Accessibility** permission the first
 time; that is macOS, not Vigil, and nothing works until you grant them.
@@ -450,9 +514,11 @@ Settings live in `~/.vigil/config.json`.
 | `ollama_host` | `http://localhost:11434` | Ollama address |
 | `ollama_model` | `qwen3:8b` | Ollama main model |
 | `approval_mode` | `auto` | `ask` / `auto` / `yolo` |
-| `max_steps` | `40` | max tool steps per request |
+| `brain` | `direct` | `direct` / `autonomous` — how it thinks |
+| `max_steps` | `40` | ceiling on tool steps; the brain may use fewer |
 | `max_tool_output` | `12000` | character cap on tool output |
 | `enable_gui` · `enable_browser` | `true` | toggle tool groups |
+| `enable_ask_screen` | `true` | Ctrl+Shift+A to circle a region and ask |
 | `enable_memory` · `enable_plugins` | `true` | memory and plugin systems |
 | `enable_planner` | `true` | task checklist for multi-step jobs |
 | `protect_paths` | `[]` | extra paths to protect |

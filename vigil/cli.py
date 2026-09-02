@@ -39,6 +39,7 @@ SLASH_HELP = [
     ("/provider [groq|ollama]", "switch the AI provider"),
     ("/models", "list the models available to you"),
     ("/mode [ask|auto|yolo]", "show or change the approval mode"),
+    ("/brain [direct|autonomous]", "show or change how it thinks"),
     ("/cwd [path]", "show or change the working directory"),
     ("/clear", "clear the screen"),
     ("/reset", "reset the conversation history"),
@@ -556,6 +557,29 @@ def _slash(line: str, agent: Agent, config: Config, ui: UI):
             ui.warn("yolo mode: moderate and high risk actions run without asking. "
                     "Blocked actions are still blocked.")
         ui.success("mode: " + argument)
+        return None
+
+    if command == "/brain":
+        if not argument:
+            chosen = brains.get(config.brain)
+            ui.info("thinking: " + chosen.name.lower() + " - " + chosen.tagline.lower())
+            ui.dim("  " + chosen.summary)
+            return None
+        if argument not in brains.names():
+            ui.error("valid brains: " + ", ".join(brains.names()))
+            return None
+
+        chosen = brains.get(argument)
+        config.brain = argument
+        # picking a way of working picks a model too, the same as in the bar
+        if config.provider == "groq":
+            config.set_active_model(chosen.model)
+            agent.provider.model = chosen.model
+        config.save()
+        agent.set_brain(argument)
+        if chosen.warning:
+            ui.warn(chosen.warning)
+        ui.success("thinking: " + chosen.name.lower() + " (" + config.active_model + ")")
         return None
 
     if command == "/cwd":

@@ -12,6 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from . import __version__
+from .palette import CHROME, DIM, HIGH, MODERATE, SAFE
 from .security import Action, Risk
 
 BANNER = r"""
@@ -39,7 +40,7 @@ class UI:
                brain: str = "") -> None:
         if self.quiet:
             return
-        self.console.print(Text(BANNER, style="bold cyan"))
+        self.console.print(Text(BANNER, style="bold " + CHROME))
         info = Table.grid(padding=(0, 2))
         info.add_column(style="dim")
         info.add_column()
@@ -58,21 +59,21 @@ class UI:
 
     def info(self, message: str) -> None:
         if not self.quiet:
-            self.console.print(Text(message, style="cyan"))
+            self.console.print(Text(message, style=CHROME))
 
     def dim(self, message: str) -> None:
         if not self.quiet:
             self.console.print(Text(message, style="dim"))
 
     def warn(self, message: str) -> None:
-        self.console.print(Text("warning: " + message, style="yellow"))
+        self.console.print(Text("warning: " + message, style=MODERATE))
 
     def error(self, message: str) -> None:
-        self.console.print(Text("error: " + message, style="bold red"))
+        self.console.print(Text("error: " + message, style="bold " + HIGH))
 
     def success(self, message: str) -> None:
         if not self.quiet:
-            self.console.print(Text(message, style="green"))
+            self.console.print(Text(message, style=SAFE))
 
     def rule(self, label: str = "") -> None:
         if not self.quiet:
@@ -81,7 +82,7 @@ class UI:
     # -------------------------------------------------------- assistant text
     def stream_chunk(self, chunk: str) -> None:
         if not self._streaming:
-            self.console.print(Text("vigil", style="bold magenta"))
+            self.console.print(Text("vigil", style="bold " + CHROME))
             self._streaming = True
         self.console.file.write(chunk)
         self.console.file.flush()
@@ -96,7 +97,7 @@ class UI:
         """Render the full answer as markdown when streaming is off."""
         if not text.strip():
             return
-        self.console.print(Text("vigil", style="bold magenta"))
+        self.console.print(Text("vigil", style="bold " + CHROME))
         try:
             self.console.print(Markdown(text))
         except Exception:
@@ -125,7 +126,7 @@ class UI:
             self.console.print(Text("     ... (" + str(len(lines) - max_lines) + " more lines)", style="dim"))
 
     # --------------------------------------------------------------- planning
-    PLAN_STYLE = {"todo": "dim", "doing": "bold cyan", "done": "green", "blocked": "red"}
+    PLAN_STYLE = {"todo": "dim", "doing": "bold " + CHROME, "done": SAFE, "blocked": HIGH}
 
     def plan(self, steps: list) -> None:
         """Render the task checklist so the user can follow along."""
@@ -144,7 +145,7 @@ class UI:
                 body.append("\n")
         done = sum(1 for step in steps if step.get("status") == "done")
         title = "plan · " + str(done) + "/" + str(len(steps)) + " done"
-        self.console.print(Panel(body, title=title, border_style="cyan", padding=(0, 1)))
+        self.console.print(Panel(body, title=title, border_style=DIM, padding=(0, 1)))
 
     # ------------------------------------------------------------ approvals
     def confirm(self, action: Action) -> str:
@@ -153,7 +154,7 @@ class UI:
             return "no"
 
         risk = action.verdict.risk
-        body = [Text(action.summary, style="bold white")]
+        body = [Text(action.summary, style="bold " + CHROME)]
         if action.verdict.reason:
             body.append(Text("reason: " + action.verdict.reason, style="dim"))
         if action.detail:
@@ -164,11 +165,11 @@ class UI:
         self.console.print(Panel(Group(*body), title=title, border_style=risk.color, padding=(0, 1)))
 
         prompt = Text()
-        prompt.append("  [y]", style="bold green")
+        prompt.append("  [y]", style="bold " + SAFE)
         prompt.append("es  ")
-        prompt.append("[n]", style="bold red")
+        prompt.append("[n]", style="bold " + HIGH)
         prompt.append("o  ")
-        prompt.append("[a]", style="bold yellow")
+        prompt.append("[a]", style="bold " + MODERATE)
         prompt.append("lways allow (this session)  > ")
 
         while True:
@@ -192,16 +193,16 @@ class UI:
     def blocked(self, action: Action, reason: str) -> None:
         self.console.print(
             Panel(
-                Text(action.summary + "\n\n" + reason, style="bright_red"),
+                Text(action.summary + "\n\n" + reason, style="bold " + HIGH),
                 title="blocked · security policy",
-                border_style="bright_red",
+                border_style=HIGH,
                 padding=(0, 1),
             )
         )
 
     # --------------------------------------------------------------- tables
     def table(self, title: str, columns: list, rows: list) -> None:
-        table = Table(title=title, title_style="bold cyan", header_style="bold")
+        table = Table(title=title, title_style="bold " + CHROME, header_style="bold")
         for column in columns:
             table.add_column(column)
         for row in rows:

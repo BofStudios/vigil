@@ -30,9 +30,10 @@ MOCK = """
   const send = (p) => setTimeout(() => window.vigil.receive(p), p._at || 0);
   window.pywebview = { api: {
     ready: async () => ({
-      version: "0.5.0", provider: "groq", model: "openai/gpt-oss-20b", mode: "ask",
+      version: "0.5.0", provider: "groq", model: "openai/gpt-oss-120b", mode: "ask",
       warning: "", hotkey: true, tray: true,
-      brain: "direct",
+      // the panel shots show a plan, and only the autonomous brain writes one
+      brain: "autonomous",
       brains: [
         { key: "direct", name: "Direct", tagline: "Does what you ask",
           model: "openai/gpt-oss-20b", warning: "",

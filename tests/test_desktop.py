@@ -339,3 +339,55 @@ def test_tray_callbacks_are_optional():
     tray = Tray()
     tray._show()
     tray._hide()  # defaults must be callable
+
+
+# ------------------------------------------------------------------ palette
+def _hue_is_blue(hex_colour: str) -> bool:
+    """Blue-dominant, and not just an off-white with a cool cast."""
+    red = int(hex_colour[1:3], 16)
+    green = int(hex_colour[3:5], 16)
+    blue = int(hex_colour[5:7], 16)
+    return blue > red + 12 and blue > green + 12
+
+
+def test_nothing_in_the_palette_is_blue():
+    """The look is warm and matte; a cold accent was the one thing that broke it."""
+    from vigil import palette
+
+    for name in ("CHROME", "DIM", "SAFE", "MODERATE", "HIGH"):
+        colour = getattr(palette, name)
+        assert colour.startswith("#") and len(colour) == 7, name
+        assert not _hue_is_blue(colour), name + " is blue"
+
+
+def test_the_terminal_uses_the_shared_palette_not_named_colours():
+    """rich's "cyan" and "magenta" are whatever the terminal decides they are."""
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parent.parent / "vigil" / "ui.py"
+    text = source.read_text(encoding="utf-8")
+    for banned in ("cyan", "magenta", "bright_red", '"yellow"', '"green"'):
+        assert banned not in text, banned + " is still in ui.py"
+
+
+def test_risk_levels_are_drawn_in_the_palette_colours():
+    from vigil import palette
+
+    assert Risk.SAFE.color == palette.SAFE
+    assert Risk.MODERATE.color == palette.MODERATE
+    assert Risk.HIGH.color == palette.HIGH
+    assert Risk.BLOCKED.color == palette.HIGH
+
+
+def test_the_bar_and_the_terminal_agree_on_the_colours():
+    """One palette, two faces. If the stylesheet moves, this fails."""
+    from pathlib import Path
+
+    from vigil import palette
+
+    css = (Path(__file__).resolve().parent.parent / "vigil" / "desktop" / "web"
+           / "style.css").read_text(encoding="utf-8").lower()
+    for token, colour in (("--accent:", palette.CHROME), ("--safe:", palette.SAFE),
+                          ("--moderate:", palette.MODERATE), ("--high:", palette.HIGH)):
+        line = next(row for row in css.splitlines() if token in row)
+        assert colour.lower() in line, token + " no longer matches " + colour

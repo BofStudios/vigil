@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .config import AUDIT_LOG, VIGIL_HOME
+from .palette import HIGH, MODERATE, SAFE
 
 
 class Risk(IntEnum):
@@ -29,7 +30,8 @@ class Risk(IntEnum):
 
     @property
     def color(self) -> str:
-        return {0: "green", 1: "yellow", 2: "red", 3: "bright_red"}[int(self)]
+        """The one colour this level is drawn in, wherever it is drawn."""
+        return {0: SAFE, 1: MODERATE, 2: HIGH, 3: HIGH}[int(self)]
 
 
 # --------------------------------------------------------------------------
