@@ -8,10 +8,14 @@
     \_/  |___\____|___|_____|
 ```
 
-**A free AI agent that operates your computer from the terminal.**
+**A free AI agent that operates your computer.**
 
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+*Download it, open it, paste a free key. No Python, no terminal.*
+
+[![Download for Windows](https://img.shields.io/badge/download-Windows-ececef?style=for-the-badge)](https://github.com/BofStudios/vigil/releases/latest)
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![Groq](https://img.shields.io/badge/AI-Groq%20(free)-orange)](https://console.groq.com/keys)
 [![Ollama](https://img.shields.io/badge/AI-Ollama%20(local)-black)](https://ollama.com)
 
@@ -31,8 +35,13 @@ Vigil is an AI agent that runs on your machine. Tell it what you want in plain l
 does the work with **real tools**: reads and writes files, runs commands, inspects system state,
 looks at your screen, drives the mouse and keyboard, and controls a browser.
 
-It comes in two forms that share the same engine: a **bar** that floats at the top of your
-screen and lives in the tray, and a **terminal client** for when you are already in a shell.
+It is a **Windows application**. You download it, open it, and paste a free key into the first
+screen — Python is inside the app, and there is no terminal anywhere in that path.
+
+<img src="docs/setup.png" alt="The first screen" width="700">
+
+There is also a **terminal client** in the same package, for people who are already in a shell.
+Both share one engine, one config and one security model.
 
 ```
 vigil > collect every pdf on my desktop into a folder called "invoices"
@@ -72,40 +81,54 @@ no subscription.
 
 ## Install
 
+### Windows — the application
+
+Download **`Vigil-x.y.z-windows-setup.exe`** from
+[the latest release](https://github.com/BofStudios/vigil/releases/latest) and run it.
+
+It installs per-user, into `%LOCALAPPDATA%\Programs\Vigil`, so it never asks for an
+administrator. There is a portable `.zip` on the same page if you would rather not install
+anything at all — unzip it and run `Vigil.exe`.
+
+Windows 10 or 11. Everything the app needs is inside it, including Python.
+
+### The key, on the first screen
+
+Vigil needs something to think with, and it asks in its own window:
+
+1. **Get a free key →** opens `console.groq.com/keys` (signing in with Google is enough)
+2. **Create API Key** → copy it
+3. Paste it into the box and press **Connect**
+
+Nothing is written to disk until that key has actually answered. Or choose **Ollama** on the
+same screen and stay entirely offline — then nothing is sent anywhere at all.
+
+### From pip, for developers
+
 ```bash
-pip install vigil-cli
+pip install "vigil-cli[all]"
+playwright install chromium      # only for the browser tools
 ```
 
-From source:
+Individual extras are `[desktop]`, `[gui]`, `[browser]` and `[voice]`. From source:
 
 ```bash
 git clone https://github.com/BofStudios/vigil.git
 cd vigil
-pip install -e .
+pip install -e ".[all]"
 ```
 
-Everything - desktop app, screen control, browser automation:
+The `GROQ_API_KEY` environment variable and a `.env` file both still work, and `vigil setup`
+configures it from a shell.
+
+### Building the application yourself
 
 ```bash
-pip install "vigil-cli[all]"
-playwright install chromium
+python tools/build_app.py --zip
 ```
 
-Individual extras are `[desktop]`, `[gui]`, `[browser]` and `[voice]` if you want a
-smaller install.
-
-### Free API key
-
-1. Go to https://console.groq.com/keys (signing in with Google is enough)
-2. **Create API Key** → copy it
-3. Configure:
-
-```bash
-vigil setup
-```
-
-You can also set the `GROQ_API_KEY` environment variable, or put it in a `.env` file in your
-working directory.
+Produces `dist/Vigil/Vigil.exe` and a portable zip beside it. CI builds the same thing plus
+the installer on every tag.
 
 ---
 
@@ -594,7 +617,9 @@ See [docs/architecture.md](docs/architecture.md) for the design,
 - [x] Two ways of thinking, picked like a model
 - [x] A light around the screen while it has the controls
 - [x] Starts with the machine, one instance, every monitor
+- [x] A real Windows application: installer, no Python, key on the first screen
 - [ ] The control light on macOS
+- [ ] A signed installer, so SmartScreen stops asking
 - [ ] Scheduled tasks (`vigil schedule`)
 - [ ] More providers: Gemini, OpenRouter
 - [ ] Optional web interface
