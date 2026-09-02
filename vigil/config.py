@@ -54,6 +54,8 @@ class Config:
     # Whisper is told which language to expect; it is far more accurate
     # with the hint than without
     voice_language: str = "en"
+    # ctrl+shift+A: circle something on screen and ask about it
+    enable_ask_screen: bool = True
     enable_plugins: bool = True
     ollama_host: str = DEFAULT_OLLAMA_HOST
     ollama_model: str = DEFAULT_OLLAMA_MODEL

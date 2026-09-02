@@ -23,6 +23,7 @@ from .. import __version__
 from ..config import Config, ensure_dirs
 from ..providers import ProviderError, build_provider, provider_notes
 from . import native
+from .glow import light as control_light
 from .session import Session
 from .tray import Tray
 from .voice import PushToTalk, Recorder
@@ -78,6 +79,8 @@ class Api:
         self.window = None
         self.tray = None
         self.hotkey = None
+        self.ask_hotkey = None
+        self.asking = False
         self.talk = None
         self.recorder = None
         self.listening = False
@@ -132,6 +135,7 @@ class Api:
             "tray": bool(self.tray and self.tray.available),
             "voice": bool(self.talk and self.talk.listening),
             "voice_key": self.config.voice_key,
+            "ask_screen": bool(self.ask_hotkey and self.ask_hotkey.registered),
             "tabs": [session.describe() for session in self.sessions.values()],
         }
 
@@ -361,6 +365,72 @@ class Api:
             return
         self.emit({"type": "voice", "tab": tab, "state": "text", "text": text})
 
+    # ------------------------------------------------------------ ask screen
+    def ask_screen(self) -> dict:
+        """Circle something on screen, and Vigil explains what it is.
+
+        The picker blocks until the user draws or gives up, so it runs on a
+        worker; the hot key thread has a message loop to get back to.
+        """
+        if self.asking:
+            return {"ok": False, "error": "already picking"}
+        self.asking = True
+        threading.Thread(target=self._ask_screen, daemon=True).start()
+        return {"ok": True}
+
+    def _ask_screen(self) -> None:
+        tab = self._first_tab()
+        try:
+            from .overlay import pick
+
+            region = pick()
+            if region is None:
+                self.emit({"type": "voice", "tab": tab, "state": "idle"})
+                return
+
+            self.emit({"type": "voice", "tab": tab, "state": "thinking",
+                       "label": "Looking"})
+            description = self._describe(region)
+        except Exception as exc:
+            self.emit({"type": "voice", "tab": tab, "state": "error", "text": str(exc)})
+            return
+        finally:
+            self.asking = False
+
+        if not description:
+            return
+
+        # The picture becomes words here, and the agent takes it from there - so
+        # it can search, open a page or look something up, the same as it would
+        # for anything else typed into the bar.
+        self.emit({"type": "voice", "tab": tab, "state": "idle"})
+        self.show_window()
+        self.send(tab, (
+            "I circled part of my screen. It shows: " + description + "\n\n"
+            "Tell me what this is and what I should know about it. "
+            "Look it up on the web if that would make the answer better."
+        ))
+
+    def _describe(self, region) -> str:
+        """Turn the circled pixels into a description the model can work from."""
+        session = self.sessions.get(self._first_tab())
+        provider = session.agent.provider if session else None
+        if provider is None:
+            raise RuntimeError("no provider")
+
+        from ..tools import gui
+
+        if not gui.AVAILABLE:
+            raise RuntimeError(gui.MISSING_HINT or "screen capture is unavailable")
+
+        image, _area = gui._capture(1, region)
+        return provider.vision(
+            "Describe what is in this image in detail: the text it contains, "
+            "what application or page it appears to be from, and anything "
+            "identifiable in it. Be specific and factual.",
+            gui._encode(image),
+        ).strip()
+
     # -------------------------------------------------------------- settings
     def set_mode(self, mode: str) -> dict:
         try:
@@ -425,8 +495,11 @@ class Api:
             self.recorder.cancel()
         if self.hotkey is not None:
             self.hotkey.stop()
+        if self.ask_hotkey is not None:
+            self.ask_hotkey.stop()
         if self.tray is not None:
             self.tray.stop()
+        control_light().stop()
         try:
             self.window.destroy()
         except Exception:
@@ -544,6 +617,20 @@ def run(config: Config = None, debug: bool = False) -> int:
 
     api.hotkey = native.HotKey(api.toggle_window)
     api.hotkey.start()
+
+    # Build the screen glow now, in the background: the first time Vigil reaches
+    # for the mouse it should light up at once, not half a second later.
+    if config.enable_gui:
+        control_light().prepare()
+
+    if config.enable_gui and config.enable_ask_screen:
+        api.ask_hotkey = native.HotKey(
+            api.ask_screen, native.MOD_CONTROL | native.MOD_SHIFT, native.VK_A,
+            combo="<ctrl>+<shift>+a",
+        )
+        if not api.ask_hotkey.start():
+            api.ask_hotkey = None
+            print("vigil: ctrl+shift+A is already taken - circling a region is off")
 
     if config.enable_voice:
         ok, reason = voice_available()

@@ -52,6 +52,22 @@ Available tool groups: {groups}
 {memory}"""
 
 
+def _light_up(tool_name: str) -> None:
+    """Glow around the screen while Vigil is the one driving.
+
+    Nobody should have to wonder who moved the pointer. The overlay is optional -
+    on a machine without it, or on a platform it does not support yet, the tools
+    still run and this quietly does nothing.
+    """
+    try:
+        from .desktop.glow import ControlLight, light
+
+        if tool_name in ControlLight.TOOLS:
+            light().touch()
+    except Exception:
+        pass
+
+
 class Agent:
     """Owns the conversation history and drives the tool loop."""
 
@@ -207,6 +223,7 @@ class Agent:
 
         started = time.time()
         try:
+            _light_up(spec.name)
             result = spec.handler(self.ctx, **args)
             output = truncate(str(result), self.config.max_tool_output)
             elapsed = time.time() - started

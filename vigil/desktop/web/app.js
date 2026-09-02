@@ -479,7 +479,9 @@
       return;
     }
     if (thinking) {
-      el.voiceText.textContent = "Transcribing";
+      // the same animation covers "circle something on screen", which arrives
+      // with its own word for what is going on
+      el.voiceText.textContent = event.label || "Transcribing";
       return;
     }
     if (event.state === "text" && event.text) {

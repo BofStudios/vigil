@@ -7,6 +7,7 @@ description. That keeps tool calling and image support from clashing.
 from __future__ import annotations
 
 import base64
+import contextlib
 import io
 import platform
 import re
@@ -37,9 +38,19 @@ MAX_IMAGE_WIDTH = 1400
 JPEG_QUALITY = 70
 
 
+def _light_out():
+    """Keep Vigil's own control glow out of a screenshot it is about to take."""
+    try:
+        from ..desktop.glow import light
+
+        return light().suspend()
+    except Exception:
+        return contextlib.nullcontext()
+
+
 def _capture(monitor: int = 1, region=None):
     """Grab the screen and return a PIL image."""
-    with mss.mss() as sct:
+    with _light_out(), mss.mss() as sct:
         monitors = sct.monitors
         index = int(monitor)
         if index < 1 or index >= len(monitors):

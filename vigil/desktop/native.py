@@ -233,6 +233,7 @@ MOD_SHIFT = 0x0004
 MOD_NOREPEAT = 0x4000
 WM_HOTKEY = 0x0312
 VK_SPACE = 0x20
+VK_A = 0x41
 
 
 class HotKey:
@@ -242,8 +243,10 @@ class HotKey:
     loop has to live where the registration happened.
     """
 
-    def __init__(self, callback, modifiers: int = MOD_CONTROL | MOD_SHIFT, key: int = VK_SPACE):
+    def __init__(self, callback, modifiers: int = MOD_CONTROL | MOD_SHIFT,
+                 key: int = VK_SPACE, combo: str = "<ctrl>+<shift>+<space>"):
         self.callback = callback
+        self.combo = combo  # the same keys again, spelled the way pynput wants
         self.modifiers = modifiers | MOD_NOREPEAT
         self.key = key
         self.registered = False
@@ -275,7 +278,7 @@ class HotKey:
             return False
 
         try:
-            self._listener = keyboard.GlobalHotKeys({"<ctrl>+<shift>+<space>": self.callback})
+            self._listener = keyboard.GlobalHotKeys({self.combo: self.callback})
             self._listener.daemon = True
             self._listener.start()
             self.registered = True
