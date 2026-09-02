@@ -417,9 +417,15 @@ import vigil.desktop.glow as glow
 assert glow.IS_WINDOWS is False
 assert glow.Glow(800, 600).prepare() is False
 glow.light().touch()
-assert glow.build_glow(200, 120).size == (200, 120)
 with glow.light().suspend():
     pass
+
+try:
+    import PIL  # noqa: F401
+except ImportError:
+    pass        # the base install has no Pillow; the drawing is tested elsewhere
+else:
+    assert glow.build_glow(200, 120).size == (200, 120)
 print("ok")
 '''
 
