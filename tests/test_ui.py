@@ -182,3 +182,105 @@ def test_asking_for_less_movement_turns_all_of_it_off(page):
         "getComputedStyle(document.getElementById('bar')).getPropertyValue('--glare').trim()"
     ) in ("", "0")
     assert opened.eval_on_selector("#send", "e => e.style.getPropertyValue('--pull-x')") == ""
+
+
+# --------------------------------------------------------- recall and paste
+def test_up_walks_back_through_what_you_asked(page):
+    opened = page()
+    opened.click("#input")
+
+    opened.keyboard.press("ArrowUp")
+    opened.wait_for_timeout(80)
+    assert opened.input_value("#input") == "sort my screenshots by month"
+
+    opened.keyboard.press("ArrowUp")
+    opened.wait_for_timeout(80)
+    assert opened.input_value("#input") == "open my downloads folder"
+
+
+def test_walking_forward_again_gives_back_what_you_were_typing(page):
+    opened = page()
+    opened.click("#input")
+    opened.keyboard.type("half a thought")
+
+    opened.keyboard.press("ArrowUp")
+    opened.wait_for_timeout(80)
+    assert opened.input_value("#input") == "sort my screenshots by month"
+
+    opened.keyboard.press("ArrowDown")
+    opened.wait_for_timeout(80)
+    assert opened.input_value("#input") == "half a thought"
+
+
+def test_the_oldest_prompt_is_where_it_stops(page):
+    opened = page()
+    opened.click("#input")
+    for _ in range(6):
+        opened.keyboard.press("ArrowUp")
+        opened.wait_for_timeout(40)
+    assert opened.input_value("#input") == "open my downloads folder"
+
+
+def test_arrows_still_move_the_caret_in_a_prompt_of_several_lines(page):
+    """Recall must not take the arrow keys away from ordinary editing."""
+    opened = page()
+    opened.click("#input")
+    opened.keyboard.type("first line")
+    opened.keyboard.down("Shift")
+    opened.keyboard.press("Enter")
+    opened.keyboard.up("Shift")
+    opened.keyboard.type("second line")
+
+    opened.keyboard.press("ArrowUp")
+    opened.wait_for_timeout(80)
+    assert "first line" in opened.input_value("#input")
+    assert "second line" in opened.input_value("#input")
+
+
+def test_a_pasted_picture_arrives_as_words(page):
+    opened = page()
+    opened.click("#input")
+
+    # a one-pixel PNG dropped onto the composer the way a paste delivers one
+    opened.evaluate("""() => {
+      const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const bytes = Uint8Array.from(atob(png), c => c.charCodeAt(0));
+      const file = new File([bytes], 'shot.png', { type: 'image/png' });
+      const data = new DataTransfer();
+      data.items.add(file);
+      document.getElementById('input').dispatchEvent(
+        new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }""")
+    opened.wait_for_timeout(700)
+    assert "bar chart of monthly revenue" in opened.input_value("#input")
+
+
+def test_pasting_with_a_file_copied_in_explorer_gives_the_path(page):
+    opened = page()
+    opened.click("#input")
+
+    opened.evaluate("""() => {
+      const data = new DataTransfer();     // no text, no files: what Windows does
+      document.getElementById('input').dispatchEvent(
+        new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }""")
+    opened.wait_for_timeout(400)
+    assert "C:/notes/plan.md" in opened.input_value("#input")
+
+
+def test_ordinary_copied_text_is_pasted_as_text(page):
+    """Nothing clever: if there is text on the clipboard it goes in unchanged."""
+    opened = page()
+    opened.click("#input")
+
+    opened.evaluate("""() => {
+      const data = new DataTransfer();
+      data.setData('text/plain', 'just some words');
+      document.getElementById('input').dispatchEvent(
+        new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }""")
+    opened.wait_for_timeout(300)
+    # the browser performs the insertion itself; what matters is that nothing
+    # replaced it with a path or a description
+    assert "C:/notes/plan.md" not in opened.input_value("#input")
+    assert "bar chart" not in opened.input_value("#input")

@@ -22,8 +22,9 @@ from pathlib import Path
 from .. import __version__, brains
 from ..config import Config, ensure_dirs
 from ..providers import ProviderError, build_provider, provider_notes
-from . import native
+from . import native, recall
 from .glow import light as control_light
+from .recall import History
 from .session import Session
 from .single import Beacon
 from .tray import Tray
@@ -82,6 +83,7 @@ class Api:
         self.hotkey = None
         self.ask_hotkey = None
         self.beacon = None
+        self.history = History()
         # approval requests the user has not answered yet; the tray says so,
         # because a run stopped behind a hidden window is the worst case
         self._waiting_on: set = set()
@@ -165,6 +167,7 @@ class Api:
             "voice_key": self.config.voice_key,
             "ask_screen": bool(self.ask_hotkey and self.ask_hotkey.registered),
             "autostart": self.autostart_on(),
+            "history": list(self.history.items),
             "tabs": [session.describe() for session in self.sessions.values()],
         }
 
@@ -322,6 +325,7 @@ class Api:
             return {"error": "still starting up - try again in a moment"}
         if session.busy:
             return {"error": "still working"}
+        self.history.add(text)
         self.expand()
         session.send_message(text)
         return {"ok": True}
@@ -464,8 +468,22 @@ class Api:
             "Look it up on the web if that would make the answer better."
         ))
 
+    LOOK = ("Describe what is in this image in detail: the text it contains, "
+            "what application or page it appears to be from, and anything "
+            "identifiable in it. Be specific and factual.")
+
     def _describe(self, region) -> str:
         """Turn the circled pixels into a description the model can work from."""
+        from ..tools import gui
+
+        if not gui.AVAILABLE:
+            raise RuntimeError(gui.MISSING_HINT or "screen capture is unavailable")
+
+        image, _area = gui._capture(1, region)
+        return self._look(image)
+
+    def _look(self, image) -> str:
+        """Ask the vision model what an image holds."""
         session = self.sessions.get(self._first_tab())
         provider = session.agent.provider if session else None
         if provider is None:
@@ -473,16 +491,40 @@ class Api:
 
         from ..tools import gui
 
-        if not gui.AVAILABLE:
-            raise RuntimeError(gui.MISSING_HINT or "screen capture is unavailable")
+        return provider.vision(self.LOOK, gui._encode(image)).strip()
 
-        image, _area = gui._capture(1, region)
-        return provider.vision(
-            "Describe what is in this image in detail: the text it contains, "
-            "what application or page it appears to be from, and anything "
-            "identifiable in it. Be specific and factual.",
-            gui._encode(image),
-        ).strip()
+    # -------------------------------------------------------------- clipboard
+    def clipboard_paths(self) -> dict:
+        """Files copied in Explorer, ready to be dropped into the box as paths."""
+        paths = recall.clipboard_files()
+        return {"paths": paths,
+                "text": " ".join(recall.quote(path) for path in paths)}
+
+    def describe_image(self, data_url: str) -> dict:
+        """An image pasted into the bar, turned into words the agent can use."""
+        import base64
+        import io
+
+        try:
+            payload = data_url.split(",", 1)[1] if "," in data_url else data_url
+            raw = base64.b64decode(payload)
+        except Exception:
+            return {"error": "that did not arrive as an image"}
+
+        try:
+            from PIL import Image
+
+            image = Image.open(io.BytesIO(raw))
+            image.load()
+            if image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
+        except Exception as exc:
+            return {"error": "could not read the image: " + str(exc)}
+
+        try:
+            return {"text": self._look(image)}
+        except Exception as exc:
+            return {"error": str(exc)}
 
     # -------------------------------------------------------------- settings
     def set_brain(self, key: str) -> dict:

@@ -34,6 +34,7 @@ MOCK = """
       warning: "", hotkey: true, tray: true,
       // the panel shots show a plan, and only the autonomous brain writes one
       brain: "autonomous",
+      history: ["open my downloads folder", "sort my screenshots by month"],
       brains: [
         { key: "direct", name: "Direct", tagline: "Does what you ask",
           model: "openai/gpt-oss-20b", warning: "",
@@ -53,6 +54,9 @@ MOCK = """
     set_brain: async (b) => ({ brain: b, model: b === "direct" ? "openai/gpt-oss-20b" : "openai/gpt-oss-120b" }),
     models: async () => ({ models: [] }), tools: async () => ({ groups: {} }),
     pick_folder: async () => ({ cancelled: true }), notify_done() {},
+    clipboard_paths: async () => ({ paths: ["C:/notes/plan.md"], text: "C:/notes/plan.md" }),
+    describe_image: async () => ({ text: "a bar chart of monthly revenue" }),
+    hold() {},
     fit: async () => ({ ok: true }),
     expand() {}, collapse() {}, hide_window() {}, show_window() {},
   }};

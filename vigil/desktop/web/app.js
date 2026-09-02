@@ -36,7 +36,7 @@
   const INPUT_MAX = 132;
 
   const state = { tabs: new Map(), active: null, mode: "ask", model: "", pending: null,
-    brain: "direct", brains: [],
+    brain: "direct", brains: [], history: [],
                   expanded: false, queued: "", resting: true };
 
   const api = () => window.pywebview && window.pywebview.api;
@@ -682,6 +682,67 @@
     input.style.height = Math.min(Math.max(input.scrollHeight, INPUT_MIN), INPUT_MAX) + "px";
   }
 
+  /* ------------------------------------------------------------- recall */
+  /* Up and Down walk back through what you have asked before, the way a shell
+     does. Whatever you had half-typed is kept and comes back when you walk
+     forward past the newest entry. */
+
+  const recall = { at: -1, draft: "" };
+
+  function recallable(direction) {
+    // Up only from the first line, Down only from the last, so a multi-line
+    // prompt can still be edited with the arrow keys.
+    const caret = el.input.selectionStart;
+    const value = el.input.value;
+    if (direction < 0) return !value.slice(0, caret).includes("\n");
+    return !value.slice(caret).includes("\n");
+  }
+
+  function stepRecall(direction) {
+    const items = state.history;
+    if (!items.length) return false;
+
+    if (recall.at === -1) {
+      if (direction > 0) return false;          // already at the newest
+      recall.draft = el.input.value;
+      recall.at = items.length;
+    }
+
+    const next = recall.at + direction;
+    if (next < 0) return true;                  // hold at the oldest
+    if (next >= items.length) {                 // back out to what you were typing
+      recall.at = -1;
+      el.input.value = recall.draft;
+    } else {
+      recall.at = next;
+      el.input.value = items[next];
+    }
+    autoGrow();
+    api().hold(!!el.input.value.trim());
+    const end = el.input.value.length;
+    el.input.setSelectionRange(end, end);
+    return true;
+  }
+
+  function leaveRecall() {
+    recall.at = -1;
+    recall.draft = "";
+  }
+
+  function insertAtCaret(text) {
+    const start = el.input.selectionStart;
+    const end = el.input.selectionEnd;
+    const before = el.input.value.slice(0, start);
+    const after = el.input.value.slice(end);
+    const spacer = before && !before.endsWith(" ") ? " " : "";
+    el.input.value = before + spacer + text + after;
+    const caret = (before + spacer + text).length;
+    el.input.setSelectionRange(caret, caret);
+    autoGrow();
+    api().hold(true);
+    el.input.focus();
+  }
+
   async function submit() {
     const text = el.input.value.trim();
     if (!text) return;
@@ -701,6 +762,8 @@
 
     el.input.value = "";
     autoGrow();
+    leaveRecall();
+    if (state.history[state.history.length - 1] !== text) state.history.push(text);
     expand();
     const result = await api().send(tab.id, text);
     if (result && result.error) toast(result.error, "error");
@@ -825,6 +888,41 @@
   });
   el.input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); }
+    if (event.key === "ArrowUp" && recallable(-1) && stepRecall(-1)) event.preventDefault();
+    if (event.key === "ArrowDown" && recallable(1) && stepRecall(1)) event.preventDefault();
+  });
+
+  /* Pasting. An image goes to the vision model and comes back as words you can
+     edit before sending. Files copied in Explorer arrive with no text at all -
+     Windows keeps them in a separate clipboard format - so Python is asked for
+     the paths. Ordinary copied text is left alone and pasted as text. */
+  el.input.addEventListener("paste", async (event) => {
+    const data = event.clipboardData;
+    if (!data) return;
+
+    const picture = [...(data.items || [])].find((item) =>
+      item.type && item.type.startsWith("image/"));
+    if (picture) {
+      event.preventDefault();
+      const file = picture.getAsFile();
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        applyVoice({ state: "thinking", label: "Looking" });
+        const result = await api().describe_image(String(reader.result));
+        applyVoice({ state: "idle" });
+        if (result && result.error) toast(result.error, "error");
+        else if (result && result.text) insertAtCaret(result.text);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    if ((data.getData("text") || "").trim()) return;   // a normal paste
+
+    event.preventDefault();
+    const found = await api().clipboard_paths();
+    if (found && found.text) insertAtCaret(found.text);
   });
 
   // Only a scroll the user started should detach the view from the bottom -
@@ -888,6 +986,7 @@
     const initial = await api().ready();
     applyMode(initial.mode);
     state.brains = initial.brains || [];
+    state.history = initial.history || [];
     applyBrain(initial.brain || "direct");
     state.model = initial.model;
     el.modelLabel.textContent = initial.model;
