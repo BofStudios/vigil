@@ -1,16 +1,17 @@
 """Circle something on screen with the mouse, and get back what was under it.
 
-This is a Tk window, which costs nothing extra: tkinter ships with Python. It is
-a good fit here because the overlay is a plain dark scrim that wants mouse input.
-The glow in `glow.py` is the opposite - it wants per-pixel alpha and no input at
-all - which is why that one is a layered Win32 window instead.
+The overlay is a Tk window, which is a good fit: a plain dark scrim that wants
+mouse input, and nothing more. The glow in `glow.py` is the opposite - per-pixel
+alpha and no input at all - which is why that one is a layered Win32 window.
+
+Tk is imported inside the one function that draws, not at the top, so a machine
+without it can still import this module and work out what was circled.
 """
 
 from __future__ import annotations
 
 import platform
 import time
-import tkinter as tk
 
 IS_WINDOWS = platform.system() == "Windows"
 IS_MAC = platform.system() == "Darwin"
@@ -31,7 +32,14 @@ class Selector:
         self._points: list = []
 
     def run(self) -> None:
-        """Show the overlay and block until the user draws or gives up."""
+        """Show the overlay and block until the user draws or gives up.
+
+        Tk is imported here rather than at the top: a machine without it can
+        still import this module, and everything except the drawing itself -
+        `pick`, and working out what was circled - needs no toolkit at all.
+        """
+        import tkinter as tk
+
         root = tk.Tk()
         root.withdraw()
 

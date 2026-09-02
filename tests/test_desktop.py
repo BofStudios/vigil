@@ -391,3 +391,53 @@ def test_the_bar_and_the_terminal_agree_on_the_colours():
                           ("--moderate:", palette.MODERATE), ("--high:", palette.HIGH)):
         line = next(row for row in css.splitlines() if token in row)
         assert colour.lower() in line, token + " no longer matches " + colour
+
+
+# ------------------------------------------------- importable off Windows
+_AS_LINUX = '''
+import builtins, ctypes, platform, sys
+sys.path.insert(0, %r)
+platform.system = lambda: "Linux"
+for gone in ("WINFUNCTYPE", "windll", "WinDLL"):
+    if hasattr(ctypes, gone):
+        delattr(ctypes, gone)
+
+_real = builtins.__import__
+def _no_tk(name, *args, **kwargs):
+    if name == "tkinter" or name.startswith("tkinter."):
+        raise ImportError("no tkinter on this box")
+    return _real(name, *args, **kwargs)
+builtins.__import__ = _no_tk
+
+import vigil.desktop.app
+import vigil.desktop.overlay
+import vigil.desktop.voice
+import vigil.desktop.glow as glow
+
+assert glow.IS_WINDOWS is False
+assert glow.Glow(800, 600).prepare() is False
+glow.light().touch()
+assert glow.build_glow(200, 120).size == (200, 120)
+with glow.light().suspend():
+    pass
+print("ok")
+'''
+
+
+def test_the_desktop_modules_import_on_a_machine_that_is_not_windows():
+    """CI is Linux. Anything Windows-only at module level breaks the whole suite.
+
+    The Win32 calling convention and tkinter are both absent there, and the glow
+    drawing still has to work because the tests exercise it everywhere.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = str(Path(__file__).resolve().parent.parent)
+    finished = subprocess.run(
+        [sys.executable, "-c", _AS_LINUX % root],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert finished.returncode == 0, finished.stderr[-2000:]
+    assert "ok" in finished.stdout

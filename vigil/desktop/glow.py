@@ -62,8 +62,14 @@ WM_DESTROY = 0x0002
 WM_QUIT = 0x0012
 
 
-WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, ctypes.c_uint,
-                             wintypes.WPARAM, wintypes.LPARAM)
+if IS_WINDOWS:
+    WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, ctypes.c_uint,
+                                 wintypes.WPARAM, wintypes.LPARAM)
+else:
+    # WINFUNCTYPE is a Windows-only calling convention. Nothing here runs
+    # elsewhere, but the module still has to import: the drawing above is plain
+    # PIL and is used by the tests on every platform.
+    WNDPROC = ctypes.c_void_p
 
 
 def _declare():
