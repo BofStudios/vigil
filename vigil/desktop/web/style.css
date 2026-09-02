@@ -111,6 +111,19 @@ html, body {
   50%      { opacity: .45; }
 }
 
+/* and a short bright dash travels along the stroke: light moving over metal,
+   which is the whole idea the surface is built on. pathLength="100" in the
+   markup means the dash is written in percent rather than in path units. */
+.mark .trace { opacity: 0; transition: opacity .3s var(--flow); }
+.working .mark .trace {
+  opacity: .9;
+  animation: trace 1.9s linear infinite;
+}
+@keyframes trace {
+  from { stroke-dashoffset: 100; }
+  to   { stroke-dashoffset: -14; }
+}
+
 .pulse {
   position: absolute;
   inset: -7px;
@@ -207,6 +220,30 @@ html, body {
   white-space: nowrap;
 }
 .resting .pill-hint { opacity: 1; transform: none; }
+
+/* A highlight crosses the wordmark every few seconds. This is the one place a
+   moving gradient belongs: it is not a fill, it is a reflection, and it is the
+   same thing the surface does when you tilt a piece of polished steel. */
+.pill-hint {
+  background: linear-gradient(
+    100deg,
+    var(--text-dim) 40%,
+    var(--text) 48%,
+    #ffffff 50%,
+    var(--text) 52%,
+    var(--text-dim) 60%
+  );
+  background-size: 260% 100%;
+  background-position: 160% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.resting .pill-hint { animation: sheen 6.5s var(--flow) infinite; }
+@keyframes sheen {
+  0%        { background-position: 160% 0; }
+  32%, 100% { background-position: -60% 0; }
+}
 
 .resting .bar { gap: 10px; padding: 0 16px 0 17px; }
 .resting #input { display: none; }
@@ -749,4 +786,70 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* ---------------------------------------------------------------- motion */
+/* Everything below is decoration on top of a working interface. All of it is
+   switched off at the bottom of this block for anyone whose system asks for
+   less movement - the app has to be usable without any of it. */
+
+/* Rows arrive rather than appear: up a few pixels, with the blur clearing.
+   Cheap on the compositor, and it makes a long run readable as a sequence
+   instead of a wall that keeps growing. */
+@keyframes lift-in {
+  from { opacity: 0; transform: translateY(6px); filter: blur(6px); }
+  to   { opacity: 1; transform: none;            filter: blur(0); }
+}
+.msg, .tool, .note { animation: lift-in .32s var(--flow) both; }
+
+/* The plan fills in the same way, one step behind the next. */
+.plan-item { animation: lift-in .3s var(--flow) both; }
+
+/* A specular highlight that follows the pointer across the bar. Two custom
+   properties are set from JS; with no pointer on it, the highlight is simply
+   transparent and nothing is drawn. */
+.bar::after,
+.footer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--glare, 0);
+  transition: opacity .35s var(--flow);
+  background: radial-gradient(
+    240px circle at var(--glare-x, 50%) var(--glare-y, 50%),
+    rgba(255, 255, 255, .07),
+    transparent 68%
+  );
+}
+.bar, .footer { position: relative; }
+
+/* A control leans a little towards the pointer before you reach it. The offset
+   comes from JS and is small on purpose - it should register as weight, not as
+   the button running away. */
+.round, .chip, .key {
+  transform: translate(var(--pull-x, 0px), var(--pull-y, 0px));
+  transition: transform .18s var(--flow), background .2s var(--flow),
+              color .2s var(--flow), border-color .2s var(--flow);
+}
+
+/* A number that changes should look like it changed. */
+.rolling { animation: roll .34s var(--flow); }
+@keyframes roll {
+  0%   { transform: translateY(-4px); opacity: .4; }
+  100% { transform: none;             opacity: 1; }
+}
+
+/* The tool name resolves out of noise as it starts. The scrambled characters
+   are monospace already, so nothing reflows while it settles. */
+.tool .name.settling { color: var(--text-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .msg, .tool, .note, .plan-item, .rolling { animation: none; }
+  .resting .pill-hint, .working .mark, .working .mark .trace { animation: none; }
+  .mark .trace { opacity: 0; }
+  .bar::after, .footer::after { display: none; }
+  .round, .chip, .key { transform: none; }
+  .pulse { animation: none; opacity: 0; }
 }

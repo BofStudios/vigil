@@ -49,6 +49,104 @@
 
   /** A deliberately small markdown subset. Everything is escaped first, so no
    *  model output can inject markup. */
+  /* ------------------------------------------------------------- motion */
+  /* Decoration, kept in one place and switched off wholesale for anyone whose
+     system asks for less movement. Nothing here changes what anything does. */
+
+  const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const NOISE = "abcdefghijklmnopqrstuvwxyz0123456789/_-";
+
+  /** A specular highlight that follows the pointer across a surface. */
+  function glare(surface) {
+    if (REDUCED || !surface) return;
+    let frame = 0;
+    surface.addEventListener("pointermove", (event) => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const box = surface.getBoundingClientRect();
+        surface.style.setProperty("--glare-x", `${event.clientX - box.left}px`);
+        surface.style.setProperty("--glare-y", `${event.clientY - box.top}px`);
+        surface.style.setProperty("--glare", "1");
+      });
+    }, { passive: true });
+    surface.addEventListener("pointerleave", () => {
+      surface.style.setProperty("--glare", "0");
+    }, { passive: true });
+  }
+
+  /** Controls lean towards the pointer before it reaches them. */
+  function magnetise(container, reach = 52, strength = 0.26) {
+    if (REDUCED || !container) return;
+    const controls = () => container.querySelectorAll(".round, .chip, .key");
+    const release = () => controls().forEach((node) => {
+      node.style.setProperty("--pull-x", "0px");
+      node.style.setProperty("--pull-y", "0px");
+    });
+
+    let frame = 0;
+    container.addEventListener("pointermove", (event) => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        controls().forEach((node) => {
+          const box = node.getBoundingClientRect();
+          const dx = event.clientX - (box.left + box.width / 2);
+          const dy = event.clientY - (box.top + box.height / 2);
+          const distance = Math.hypot(dx, dy);
+          if (distance > reach) {
+            node.style.setProperty("--pull-x", "0px");
+            node.style.setProperty("--pull-y", "0px");
+            return;
+          }
+          // strongest up close, nothing at the edge of the reach
+          const fall = 1 - distance / reach;
+          node.style.setProperty("--pull-x", `${(dx * strength * fall).toFixed(2)}px`);
+          node.style.setProperty("--pull-y", `${(dy * strength * fall).toFixed(2)}px`);
+        });
+      });
+    }, { passive: true });
+    container.addEventListener("pointerleave", release, { passive: true });
+  }
+
+  /** Resolve text out of noise. Short - it is a cue, not a cutscene. */
+  function settle(node, text, duration = 240) {
+    const wanted = String(text ?? "");
+    if (REDUCED || !wanted) { node.textContent = wanted; return; }
+
+    node.classList.add("settling");
+    const started = performance.now();
+    const step = (now) => {
+      const progress = Math.min(1, (now - started) / duration);
+      const resolved = Math.floor(wanted.length * progress);
+      let shown = wanted.slice(0, resolved);
+      for (let i = resolved; i < wanted.length; i += 1) {
+        shown += wanted[i] === " "
+          ? " "
+          : NOISE[(Math.random() * NOISE.length) | 0];
+      }
+      node.textContent = shown;
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      } else {
+        node.textContent = wanted;
+        node.classList.remove("settling");
+      }
+    };
+    requestAnimationFrame(step);
+  }
+
+  /** Change a number and let it read as a change rather than a redraw. */
+  function roll(node, text) {
+    const wanted = String(text);
+    if (node.textContent === wanted) return;
+    node.textContent = wanted;
+    if (REDUCED) return;
+    node.classList.remove("rolling");
+    void node.offsetWidth;          // restart the animation rather than ignore it
+    node.classList.add("rolling");
+  }
+
   function renderMarkdown(raw) {
     const blocks = [];
     const stripped = String(raw ?? "").replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
@@ -264,7 +362,7 @@
     node.className = "tool running " + (event.risk || "moderate");
     node.innerHTML = '<span class="bead"></span><div class="col">'
       + '<span class="name"></span><span class="sub"></span></div>';
-    node.querySelector(".name").textContent = event.name;
+    settle(node.querySelector(".name"), event.name);
     node.querySelector(".sub").textContent = event.summary || "";
     tab.lastTool = node;
     appendTo(tab, node);
@@ -324,7 +422,7 @@
     el.planStrip.hidden = false;
 
     const done = steps.filter((step) => step.status === "done").length;
-    el.planCount.textContent = `${done}/${steps.length}`;
+    roll(el.planCount, `${done}/${steps.length}`);
     el.planBar.style.width = `${(done / steps.length) * 100}%`;
 
     el.planList.innerHTML = "";
@@ -663,7 +761,7 @@
       }
       if (event.tokens && tab.id === state.active) {
         el.tokens.hidden = false;
-        el.tokens.textContent = event.tokens.toLocaleString() + " tok";
+        roll(el.tokens, event.tokens.toLocaleString() + " tok");
       }
       renderTabs();
       if (tab.id === state.active) setBusy(tab.busy);
@@ -773,6 +871,15 @@
     }
   });
 
+  // Surfaces that catch the light, and controls that lean towards the pointer.
+  // Both are no-ops when the system has asked for less movement.
+  const footer = document.querySelector(".footer");
+  glare(el.bar);
+  glare(footer);
+  magnetise(el.bar);
+  magnetise(footer);
+  magnetise(el.approval);
+
   // ---------------------------------------------------------------- boot
   async function boot() {
     // the initial window size is not honoured for a frameless window; one
@@ -787,7 +894,7 @@
 
     for (const info of initial.tabs || []) {
       makeTab(info);
-      el.toolsLabel.textContent = info.tools + " tools";
+      roll(el.toolsLabel, info.tools + " tools");
     }
     const first = initial.tabs && initial.tabs[0];
     if (first) {
