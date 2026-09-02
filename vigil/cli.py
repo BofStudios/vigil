@@ -379,6 +379,33 @@ def cmd_plugins(args, config: Config, ui: UI) -> int:
 # -------------------------------------------------------------------- app
 def cmd_app(args, config: Config, ui: UI) -> int:
     """Open the desktop window."""
+    wanted = getattr(args, "autostart", None)
+    if wanted:
+        from .desktop import shortcut
+
+        if wanted == "status":
+            where = shortcut.autostart_dir()
+            if shortcut.autostart_enabled():
+                ui.success("Vigil starts when you log in")
+            else:
+                ui.info("Vigil does not start on its own")
+            if where:
+                ui.dim("  " + str(where))
+            return 0
+        try:
+            if wanted == "on":
+                path = shortcut.enable_autostart()
+                ui.success("Vigil will start when you log in")
+                ui.dim("  " + str(path))
+            else:
+                removed = shortcut.disable_autostart()
+                ui.success("Vigil will not start on its own"
+                           + ("" if removed else " (it was not set to)"))
+        except OSError as exc:
+            ui.error(str(exc))
+            return 1
+        return 0
+
     if getattr(args, "install_shortcut", False):
         from .desktop import shortcut
 
@@ -723,6 +750,8 @@ def build_parser() -> argparse.ArgumentParser:
     plugins_parser.add_argument("value", nargs="?", help="plugin name for `new`")
 
     app_parser = subparsers.add_parser("app", help="open the desktop app")
+    app_parser.add_argument("--autostart", choices=["on", "off", "status"],
+                            help="start Vigil when you log in")
     app_parser.add_argument("--install-shortcut", action="store_true",
                             help="put a Vigil shortcut on the desktop and exit")
     app_parser.add_argument("--debug", action="store_true", help="open the web inspector")

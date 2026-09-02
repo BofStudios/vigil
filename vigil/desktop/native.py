@@ -182,6 +182,69 @@ def screen_size() -> tuple:
         return 1920, 1080
 
 
+def monitors() -> list:
+    """Every display, as (left, top, width, height) in virtual-desktop pixels.
+
+    Coordinates can be negative: a monitor placed to the left of the primary one
+    starts below zero. Anything drawn across the whole desktop has to work in
+    this space rather than assuming the primary screen is all there is.
+    """
+    if IS_WINDOWS:
+        try:
+            user32 = ctypes.windll.user32
+            user32.SetProcessDPIAware()
+            found = []
+
+            proc = ctypes.WINFUNCTYPE(
+                ctypes.c_int, wintypes.HMONITOR, wintypes.HDC,
+                ctypes.POINTER(wintypes.RECT), wintypes.LPARAM,
+            )
+
+            def collect(_monitor, _dc, rect, _param):
+                box = rect.contents
+                found.append((box.left, box.top,
+                              box.right - box.left, box.bottom - box.top))
+                return 1
+
+            user32.EnumDisplayMonitors(None, None, proc(collect), 0)
+            if found:
+                return found
+        except Exception:
+            pass
+    try:
+        import mss
+
+        with mss.mss() as sct:
+            # index 0 is the bounding box of them all; the rest are real screens
+            screens = sct.monitors[1:] or sct.monitors
+            return [(m["left"], m["top"], m["width"], m["height"]) for m in screens]
+    except Exception:
+        width, height = screen_size()
+        return [(0, 0, width, height)]
+
+
+def virtual_screen() -> tuple:
+    """(left, top, width, height) covering every display at once."""
+    if IS_WINDOWS:
+        try:
+            metrics = ctypes.windll.user32.GetSystemMetrics
+            ctypes.windll.user32.SetProcessDPIAware()
+            # SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN
+            left, top = metrics(76), metrics(77)
+            width, height = metrics(78), metrics(79)
+            if width > 0 and height > 0:
+                return left, top, width, height
+        except Exception:
+            pass
+
+    boxes = monitors()
+    left = min(box[0] for box in boxes)
+    top = min(box[1] for box in boxes)
+    right = max(box[0] + box[2] for box in boxes)
+    bottom = max(box[1] + box[3] for box in boxes)
+    return left, top, right - left, bottom - top
+
+
 def cursor_position():
     """Where the pointer is, in screen pixels. None when it cannot be read."""
     if IS_WINDOWS:

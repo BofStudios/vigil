@@ -89,7 +89,7 @@ def test_the_tools_that_do_light_it_are_the_ones_driving_input():
 class _FakeGlow:
     """Stands in for the layered window so the timing can be tested anywhere."""
 
-    def __init__(self, *_args):
+    def __init__(self, *_args, **_kwargs):
         self.showing = False
         self.shows = 0
         self.error = ""
@@ -217,3 +217,67 @@ def test_lighting_up_never_breaks_a_tool_call(monkeypatch):
         glow_module, "light", lambda: (_ for _ in ()).throw(RuntimeError("no display"))
     )
     agent_module._light_up("mouse_click")   # swallowed, nothing raised
+
+
+# ------------------------------------------------------------ more than one screen
+def test_each_monitor_gets_its_own_frame():
+    """One ring around the whole desktop would leave the inner edges dark."""
+    frames = [(0, 0, 200, 150), (220, 0, 180, 150)]
+    alpha = build_glow(400, 150, frames).split()[3]
+
+    for left, top, width, height in frames:
+        assert alpha.getpixel((left + 1, top + height // 2)) > 200      # left edge lit
+        assert alpha.getpixel((left + width - 2, top + height // 2)) > 200  # right edge
+        assert alpha.getpixel((left + width // 2, top + height // 2)) == 0  # middle clear
+
+
+def test_the_gap_between_two_screens_is_not_lit():
+    alpha = build_glow(400, 150, [(0, 0, 190, 150), (210, 0, 190, 150)]).split()[3]
+    assert alpha.getpixel((200, 75)) < 60      # bloom only, no core line
+
+
+def test_a_screen_offset_from_the_origin_is_framed_where_it_actually_is():
+    """A monitor left of the primary one starts at a negative coordinate."""
+    alpha = build_glow(300, 300, [(100, 120, 150, 150)]).split()[3]
+
+    assert alpha.getpixel((101, 195)) > 200    # its own left edge
+    assert alpha.getpixel((5, 195)) == 0       # nothing where no screen is
+
+
+def test_no_frames_still_means_one_frame_round_everything():
+    plain = build_glow(200, 160)
+    explicit = build_glow(200, 160, [(0, 0, 200, 160)])
+    assert plain.tobytes() == explicit.tobytes()
+
+
+def test_the_overlay_remembers_where_on_the_desktop_it_sits():
+    overlay = Glow(3640, 1602, origin=(-1080, -162), frames=[(0, 0, 100, 100)])
+    assert overlay.origin == (-1080, -162)
+    assert overlay.frames == [(0, 0, 100, 100)]
+
+
+def test_the_light_covers_every_monitor(monkeypatch):
+    """Built from the virtual desktop, not from the primary screen."""
+    from vigil.desktop import native
+
+    monkeypatch.setattr(glow_module, "IS_WINDOWS", True)
+    monkeypatch.setattr(native, "virtual_screen", lambda: (-1080, -162, 3640, 1602))
+    monkeypatch.setattr(native, "monitors",
+                        lambda: [(0, 0, 2560, 1440), (-1080, -162, 864, 1536)])
+
+    built = {}
+
+    class _Recording(_FakeGlow):
+        def __init__(self, width, height, origin=(0, 0), frames=None):
+            super().__init__()
+            built.update(size=(width, height), origin=origin, frames=frames)
+
+    monkeypatch.setattr(glow_module, "Glow", _Recording)
+    controller = ControlLight()
+    controller.touch()
+
+    assert built["size"] == (3640, 1602)
+    assert built["origin"] == (-1080, -162)
+    # translated into the bitmap's own coordinates, so both start at or above zero
+    assert built["frames"] == [(1080, 162, 2560, 1440), (0, 0, 864, 1536)]
+    controller.stop()

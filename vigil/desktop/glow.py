@@ -186,38 +186,49 @@ def _alpha_at(distance: int) -> float:
     return BLOOM_ALPHA * math.exp(-(distance - 2) / DECAY)
 
 
-def build_glow(width: int, height: int):
+def build_glow(width: int, height: int, frames=None):
     """Draw the glow: rounded rings, blurred into one gradient, crisp line on top.
 
     Each ring is a single pixel wide and carries its own alpha, so there is no
     banding to begin with; the blur then removes the last of the stepping. The
     core line is redrawn afterwards so the blur cannot soften the edge itself.
+
+    `frames` is a list of (left, top, width, height) boxes to outline, in this
+    bitmap's own coordinates. One bitmap can therefore span every monitor and
+    still put a frame around each - a single ring around the whole virtual
+    desktop would leave the inner edges of a two-screen setup unlit.
     """
     from PIL import Image, ImageDraw, ImageFilter
 
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    limit = min(REACH, width // 2, height // 2)
+    boxes = list(frames) if frames else [(0, 0, width, height)]
 
-    for distance in range(limit):
-        alpha = _alpha_at(distance)
-        if alpha <= 0.003:
-            break
-        draw.rounded_rectangle(
-            [distance, distance, width - 1 - distance, height - 1 - distance],
-            radius=max(2, RADIUS - distance),
-            outline=TINT + (int(round(alpha * 255)),),
-        )
+    for left, top, box_width, box_height in boxes:
+        limit = min(REACH, box_width // 2, box_height // 2)
+        for distance in range(limit):
+            alpha = _alpha_at(distance)
+            if alpha <= 0.003:
+                break
+            draw.rounded_rectangle(
+                [left + distance, top + distance,
+                 left + box_width - 1 - distance, top + box_height - 1 - distance],
+                radius=max(2, RADIUS - distance),
+                outline=TINT + (int(round(alpha * 255)),),
+            )
 
     if BLUR:
         image = image.filter(ImageFilter.GaussianBlur(BLUR))
         core = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        ImageDraw.Draw(core).rounded_rectangle(
-            [1, 1, width - 2, height - 2],
-            radius=RADIUS,
-            outline=TINT + (int(round(CORE_ALPHA * 255)),),
-            width=2,
-        )
+        pen = ImageDraw.Draw(core)
+        for left, top, box_width, box_height in boxes:
+            pen.rounded_rectangle(
+                [left + 1, top + 1,
+                 left + box_width - 2, top + box_height - 2],
+                radius=RADIUS,
+                outline=TINT + (int(round(CORE_ALPHA * 255)),),
+                width=2,
+            )
         image = Image.alpha_composite(image, core)
     return image
 
@@ -254,9 +265,13 @@ class Glow:
     _class_name = "VigilGlowOverlay"
     _proc = None
 
-    def __init__(self, width: int, height: int):
+    def __init__(self, width: int, height: int, origin=(0, 0), frames=None):
         self.width = width
         self.height = height
+        # where the bitmap sits on the virtual desktop; negative on a setup with
+        # a monitor to the left of the primary one
+        self.origin = tuple(origin)
+        self.frames = frames
         self.showing = False
         self.error = ""
         self.ready = threading.Event()
@@ -359,7 +374,7 @@ class Glow:
                 WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW
                 | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
                 Glow._class_name, "Vigil control", WS_POPUP,
-                0, 0, self.width, self.height,
+                self.origin[0], self.origin[1], self.width, self.height,
                 None, None, ctypes.windll.kernel32.GetModuleHandleW(None), None,
             )
             if not hwnd:
@@ -370,7 +385,8 @@ class Glow:
                 return
             self._hwnd = hwnd
 
-            self._paint(hwnd, gdi32, user32, build_glow(self.width, self.height))
+            self._paint(hwnd, gdi32, user32,
+                        build_glow(self.width, self.height, self.frames))
             self.ready.set()
 
             message = wintypes.MSG()
@@ -426,7 +442,7 @@ class Glow:
         blend = _BlendFunction(AC_SRC_OVER, 0, 255, AC_SRC_ALPHA)
         size = wintypes.SIZE(width, height)
         source = wintypes.POINT(0, 0)
-        position = wintypes.POINT(0, 0)
+        position = wintypes.POINT(self.origin[0], self.origin[1])
 
         user32.UpdateLayeredWindow(
             wintypes.HWND(hwnd), screen_dc, ctypes.byref(position), ctypes.byref(size),
@@ -521,8 +537,12 @@ class ControlLight:
             if self._glow is None:
                 from . import native
 
-                width, height = native.screen_size()
-                self._glow = Glow(width, height)
+                # every monitor, framed individually, on one bitmap spanning the
+                # whole virtual desktop - otherwise a second screen stays dark
+                left, top, width, height = native.virtual_screen()
+                frames = [(x - left, y - top, box_width, box_height)
+                          for x, y, box_width, box_height in native.monitors()]
+                self._glow = Glow(width, height, origin=(left, top), frames=frames)
             glow = self._glow
         glow.prepare()
         return glow

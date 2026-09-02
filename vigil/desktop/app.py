@@ -25,6 +25,7 @@ from ..providers import ProviderError, build_provider, provider_notes
 from . import native
 from .glow import light as control_light
 from .session import Session
+from .single import Beacon
 from .tray import Tray
 from .voice import PushToTalk, Recorder
 from .voice import available as voice_available
@@ -80,6 +81,10 @@ class Api:
         self.tray = None
         self.hotkey = None
         self.ask_hotkey = None
+        self.beacon = None
+        # approval requests the user has not answered yet; the tray says so,
+        # because a run stopped behind a hidden window is the worst case
+        self._waiting_on: set = set()
         self.asking = False
         self.talk = None
         self.recorder = None
@@ -104,6 +109,27 @@ class Api:
 
     def emit(self, payload: dict) -> None:
         self._outbox.put(payload)
+        self._follow(payload)
+
+    def _follow(self, payload: dict) -> None:
+        """Keep the tray icon in step with what is going on."""
+        kind = payload.get("type")
+        if kind == "approval":
+            self._waiting_on.add(payload.get("request"))
+        elif kind == "status" and not payload.get("busy"):
+            self._waiting_on.clear()
+        self.refresh_tray()
+
+    def refresh_tray(self) -> None:
+        if self.tray is None or not self.tray.available:
+            return
+        if self._waiting_on:
+            state = "waiting"
+        elif any(session.busy for session in self.sessions.values()):
+            state = "busy"
+        else:
+            state = "idle"
+        self.tray.set_state(state)
 
     def _drain(self) -> None:
         self._ready.wait()
@@ -138,6 +164,7 @@ class Api:
             "voice": bool(self.talk and self.talk.listening),
             "voice_key": self.config.voice_key,
             "ask_screen": bool(self.ask_hotkey and self.ask_hotkey.registered),
+            "autostart": self.autostart_on(),
             "tabs": [session.describe() for session in self.sessions.values()],
         }
 
@@ -306,10 +333,34 @@ class Api:
         return {"ok": True}
 
     def answer(self, tab_id: str, request_id: str, value: str) -> dict:
+        self._waiting_on.discard(request_id)
+        self.refresh_tray()
         session = self.sessions.get(tab_id)
         if session is None:
             return {"error": "no such tab"}
         return {"ok": session.ui.answer(request_id, value)}
+
+    # ---------------------------------------------------- start with the machine
+    def autostart_on(self) -> bool:
+        from .shortcut import autostart_enabled
+
+        try:
+            return autostart_enabled()
+        except Exception:
+            return False
+
+    def set_autostart(self, wanted: bool) -> dict:
+        """Turn starting-with-the-machine on or off."""
+        from .shortcut import disable_autostart, enable_autostart
+
+        try:
+            if wanted:
+                enable_autostart()
+            else:
+                disable_autostart()
+        except OSError as exc:
+            return {"error": str(exc)}
+        return {"autostart": self.autostart_on()}
 
     def notify_done(self, title: str = "") -> None:
         """Ping the tray when a run finishes while the bar is hidden."""
@@ -528,6 +579,8 @@ class Api:
             self.hotkey.stop()
         if self.ask_hotkey is not None:
             self.ask_hotkey.stop()
+        if self.beacon is not None:
+            self.beacon.stop()
         if self.tray is not None:
             self.tray.stop()
         control_light().stop()
@@ -605,6 +658,15 @@ def run(config: Config = None, debug: bool = False) -> int:
             'The desktop app needs pywebview.\n  pip install "vigil-cli[desktop]"'
         ) from None
 
+    # A second Vigil would mean two trays, two sets of sessions, and two hot
+    # keys fighting over the same combination. Hand the job to the one already
+    # running instead.
+    from .single import summon
+
+    if summon():
+        print("vigil: already running - brought the bar forward")
+        return 0
+
     config = config or Config.load()
     ensure_dirs()
 
@@ -643,8 +705,14 @@ def run(config: Config = None, debug: bool = False) -> int:
     window = webview.create_window(WINDOW_TITLE, str(WEB_DIR / "index.html"), **options)
     api.attach(window)
 
-    api.tray = Tray(on_show=api.show_window, on_hide=api.hide_window, on_quit=api.quit)
+    api.tray = Tray(
+        on_show=api.show_window, on_hide=api.hide_window, on_quit=api.quit,
+        on_autostart=api.set_autostart, autostart_state=api.autostart_on,
+    )
     api.tray.start()
+
+    api.beacon = Beacon(on_summon=api.show_window)
+    api.beacon.start()
 
     api.hotkey = native.HotKey(api.toggle_window)
     api.hotkey.start()
