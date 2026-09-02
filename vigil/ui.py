@@ -35,7 +35,8 @@ class UI:
         self._streaming = False
 
     # ------------------------------------------------------------ general
-    def banner(self, model: str, mode: str, tool_count: int, cwd: str) -> None:
+    def banner(self, model: str, mode: str, tool_count: int, cwd: str,
+               brain: str = "") -> None:
         if self.quiet:
             return
         self.console.print(Text(BANNER, style="bold cyan"))
@@ -44,6 +45,8 @@ class UI:
         info.add_column()
         info.add_row("version", "v" + __version__ + "  ·  BOF Studios")
         info.add_row("model", model)
+        if brain:
+            info.add_row("thinking", _brain_label(brain))
         info.add_row("mode", _mode_label(mode))
         info.add_row("tools", str(tool_count) + " ready")
         info.add_row("directory", cwd)
@@ -219,6 +222,13 @@ def _detail_renderable(detail: str):
 def _one_line(text: str, limit: int) -> str:
     flat = " ".join(str(text).split())
     return flat if len(flat) <= limit else flat[: limit - 3] + "..."
+
+
+def _brain_label(brain: str) -> str:
+    from .brains import get
+
+    chosen = get(brain)
+    return chosen.name.lower() + " - " + chosen.tagline.lower()
 
 
 def _mode_label(mode: str) -> str:

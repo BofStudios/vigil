@@ -30,8 +30,18 @@ MOCK = """
   const send = (p) => setTimeout(() => window.vigil.receive(p), p._at || 0);
   window.pywebview = { api: {
     ready: async () => ({
-      version: "0.5.0", provider: "groq", model: "openai/gpt-oss-120b", mode: "ask",
+      version: "0.5.0", provider: "groq", model: "openai/gpt-oss-20b", mode: "ask",
       warning: "", hotkey: true, tray: true,
+      brain: "direct",
+      brains: [
+        { key: "direct", name: "Direct", tagline: "Does what you ask",
+          model: "openai/gpt-oss-20b", warning: "",
+          summary: "Follows your instruction step by step and stops when it is finished. Best for everyday jobs - open this, rename that, find that file." },
+        { key: "autonomous", name: "Autonomous", tagline: "Works out how",
+          model: "openai/gpt-oss-120b",
+          summary: "Give it a problem rather than an instruction and it plans a route, tries things, and changes course when they do not work. Best for when you do not know the steps yourself.",
+          warning: "Takes many more actions on its own before it comes back to you. It still asks before touching your mouse, keyboard or screen - that never changes - but it will travel further on a wrong idea before you see it." },
+      ],
       tabs: [{ id: "tab-1", title: "Tidy the downloads folder",
                cwd: "C:\\\\Users\\\\you\\\\Downloads", busy: false, tools: 45 }],
     }),
@@ -39,6 +49,7 @@ MOCK = """
     close_tab: async () => ({ tabs: [] }), send: async () => ({ ok: true }),
     stop: async () => ({ ok: true }), answer: async () => ({ ok: true }),
     set_mode: async (m) => ({ mode: m }), set_model: async (m) => ({ model: m }),
+    set_brain: async (b) => ({ brain: b, model: b === "direct" ? "openai/gpt-oss-20b" : "openai/gpt-oss-120b" }),
     models: async () => ({ models: [] }), tools: async () => ({ groups: {} }),
     pick_folder: async () => ({ cancelled: true }), notify_done() {},
     fit: async () => ({ ok: true }),
@@ -70,6 +81,11 @@ MOCK = """
     send({ _at: 50, tab, type: "tool_result", ok: true, text: "C:\\\\Users\\\\you\\\\Downloads\\\\installers is ready." });
     send({ _at: 60, tab, type: "assistant_full", text:
       "Here is what I found in **Downloads**:\\n\\n- 142 files, **1.9 GB** total\\n- I moved 8 installers into `installers/`\\n- `old_backup.7z` alone is **1.4 GB** and has not been touched since March\\n\\nWant me to delete it?" });
+
+    if (location.search.includes("brains")) {
+      setTimeout(() => document.getElementById("chip-brain").click(), 80);
+      return;
+    }
 
     if (location.search.includes("approval")) {
       send({ _at: 90, tab, type: "approval", request: "req-1", tool: "delete_path",
@@ -120,6 +136,7 @@ def main() -> None:
     shots = [
         ("screenshot.png", "", PANEL_HEIGHT),
         ("approval.png", "?approval=1", PANEL_HEIGHT),
+        ("brains.png", "?brains=1", PANEL_HEIGHT),
         ("bar.png", "?bar=1", BAR_HEIGHT),
         ("pill.png", "?pill=1", PILL_HEIGHT),
     ]

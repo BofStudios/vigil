@@ -8,6 +8,7 @@ import threading
 import time
 from pathlib import Path
 
+from . import brains
 from . import memory as memory_store
 from .config import SESSION_DIR
 from .providers import ProviderError, to_openai_tools, tool_result_message
@@ -24,11 +25,7 @@ HOW YOU WORK
 - When the job is done, give a short and clear summary. No filler, no repetition.
 - Reply in the language the user writes in.
 
-PLANNING
-- For any job that needs three or more steps, call create_plan first and write the steps down.
-- Mark each step with update_plan the moment it finishes, not in a batch at the end.
-- The user sees the plan, so it is also how you tell them what you are about to do.
-- Skip planning for single-step requests; do not plan a plan.
+{approach}
 
 SECURITY
 - Some actions require user approval; if approval is denied, do not insist - offer an alternative.
@@ -84,8 +81,9 @@ class Agent:
             ui=ui,
             cwd=Path(cwd or Path.cwd()).resolve(),
         )
+        self.brain = brains.get(getattr(config, "brain", brains.DEFAULT))
         self.messages = [{"role": "system", "content": self._system_prompt()}]
-        self.tool_schemas = to_openai_tools(registry.specs())
+        self.tool_schemas = to_openai_tools(self._offered_specs())
         self.steps_used = 0
         self.interrupted = False
         self._stop = threading.Event()
@@ -113,9 +111,33 @@ class Agent:
             cwd=str(self.ctx.cwd),
             date=time.strftime("%Y-%m-%d %H:%M"),
             mode=self.guard.mode,
+            approach=self.brain.approach,
             groups=groups,
             memory=notes,
         )
+
+    def _offered_specs(self) -> list:
+        """The tools this brain gets to see.
+
+        Direct does not plan, so it is not shown the planning tools at all -
+        telling a model not to use a tool it can see is a weaker instruction
+        than not offering it.
+        """
+        specs = self.registry.specs()
+        if self.brain.plans:
+            return specs
+        return [spec for spec in specs if spec.group != "planning"]
+
+    @property
+    def max_steps(self) -> int:
+        """Step budget: the brain's, but never more than the user allowed."""
+        return min(self.config.max_steps, self.brain.max_steps)
+
+    def set_brain(self, key: str) -> None:
+        """Switch how it thinks. Takes effect from the next message."""
+        self.brain = brains.get(key)
+        self.tool_schemas = to_openai_tools(self._offered_specs())
+        self.refresh_system_prompt()
 
     def request_stop(self) -> None:
         """Ask the run to wind down. Checked between steps and between tool calls.
@@ -140,7 +162,7 @@ class Agent:
         self._stop.clear()
         final_text = ""
 
-        for step in range(self.config.max_steps):
+        for step in range(self.max_steps):
             if self._stop.is_set():
                 self.interrupted = True
                 self.ui.end_stream()
@@ -197,7 +219,7 @@ class Agent:
                 return ""
 
         self.ui.warn(
-            "step limit (" + str(self.config.max_steps) + ") reached. Ask again to continue."
+            "step limit (" + str(self.max_steps) + ") reached. Ask again to continue."
         )
         return final_text
 

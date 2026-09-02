@@ -684,6 +684,31 @@ html, body {
 .pick.on { background: var(--accent-wash); color: var(--text); }
 .pick .name { font-family: var(--mono); font-size: 12px; }
 
+/* the chip reads amber while the riskier way of thinking is switched on */
+.chip.warn { color: var(--moderate); border-color: rgba(207, 174, 106, .34); }
+
+/* the brain picker: a name you choose by, and the reason underneath it */
+.pick.tall { display: block; padding: 11px 12px; }
+.pick.tall .head { display: flex; align-items: baseline; gap: 8px; }
+.pick.tall .title { font-size: 13px; font-weight: 620; color: var(--text); }
+.pick.tall .tag { font-size: 11px; color: var(--text-faint); }
+.pick.tall .model {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--text-faint);
+}
+.pick.tall .desc {
+  margin-top: 5px;
+  font-size: 11.5px; line-height: 1.5;
+  color: var(--text-dim);
+}
+.pick.tall .warn {
+  margin-top: 7px; padding-top: 7px;
+  border-top: 1px solid var(--edge-top);
+  font-size: 11px; line-height: 1.5;
+  color: var(--moderate);
+}
+
 .group-title {
   margin: 13px 0 4px;
   color: var(--accent);

@@ -39,6 +39,9 @@ class Config:
     # auto by default: routine work runs unattended, while taking the mouse,
     # keyboard or screen is confirmed every time regardless (see ALWAYS_ASK)
     approval_mode: str = "auto"  # ask | auto | yolo
+    # how it thinks: "direct" follows instructions, "autonomous" works out the
+    # route itself. See vigil/brains.py - it changes behaviour, never security.
+    brain: str = "direct"
     temperature: float = 0.3
     max_steps: int = 40
     max_tool_output: int = 12000
@@ -124,6 +127,11 @@ class Config:
             raise ValueError("approval_mode must be one of: " + ", ".join(APPROVAL_MODES))
         if key == "provider" and value not in PROVIDERS:
             raise ValueError("provider must be one of: " + ", ".join(PROVIDERS))
+        if key == "brain":
+            from .brains import names as brain_names
+
+            if value not in brain_names():
+                raise ValueError("brain must be one of: " + ", ".join(brain_names()))
         setattr(self, key, value)
         return value
 

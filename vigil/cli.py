@@ -8,7 +8,7 @@ import platform
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import __version__, brains
 from . import memory as memory_store
 from .agent import Agent
 from .config import (
@@ -429,7 +429,8 @@ def cmd_chat(args, config: Config, ui: UI) -> int:
 
 
 def _repl(agent: Agent, config: Config, ui: UI) -> int:
-    ui.banner(config.active_model, config.approval_mode, len(agent.registry), str(agent.ctx.cwd))
+    ui.banner(config.active_model, config.approval_mode, len(agent.registry),
+              str(agent.ctx.cwd), brain=config.brain)
     note = provider_notes(config)
     if note:
         ui.warn(note)
@@ -634,7 +635,7 @@ def _slash(line: str, agent: Agent, config: Config, ui: UI):
 
 
 # ------------------------------------------------------------------- main
-VALUE_FLAGS = {"--model", "--mode", "--cwd", "--provider", "-n", "--count"}
+VALUE_FLAGS = {"--model", "--mode", "--brain", "--cwd", "--provider", "-n", "--count"}
 
 
 def _first_positional_index(argv: list):
@@ -662,6 +663,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--provider", choices=list(PROVIDERS), help="AI provider (groq or ollama)")
     parser.add_argument("--model", help="model to use for this run")
     parser.add_argument("--mode", choices=list(APPROVAL_MODES), help="approval mode")
+    parser.add_argument(
+        "--brain", choices=brains.names(),
+        help="how it thinks: direct follows instructions, autonomous works out the route",
+    )
     parser.add_argument("--yolo", action="store_true", help="never ask (blocked actions stay blocked)")
     parser.add_argument("--cwd", help="starting working directory")
     parser.add_argument("--no-stream", action="store_true", help="do not stream the answer")
@@ -731,6 +736,11 @@ def main(argv=None) -> int:
         config.set_active_model(args.model)
     if args.mode:
         config.approval_mode = args.mode
+    if args.brain:
+        config.brain = args.brain
+        # the two ways of working run on different models, the same as in the bar
+        if config.provider == "groq":
+            config.set_active_model(brains.get(args.brain).model)
     if args.yolo:
         config.approval_mode = "yolo"
     if args.no_stream:

@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-from .. import __version__
+from .. import __version__, brains
 from ..config import Config, ensure_dirs
 from ..providers import ProviderError, build_provider, provider_notes
 from . import native
@@ -130,6 +130,8 @@ class Api:
             "provider": self.config.provider,
             "model": self.config.active_model,
             "mode": self.config.approval_mode,
+            "brain": self.config.brain,
+            "brains": brains.describe_all(),
             "warning": provider_notes(self.config),
             "hotkey": bool(self.hotkey and self.hotkey.registered),
             "tray": bool(self.tray and self.tray.available),
@@ -432,6 +434,35 @@ class Api:
         ).strip()
 
     # -------------------------------------------------------------- settings
+    def set_brain(self, key: str) -> dict:
+        """Switch how Vigil thinks.
+
+        This is a model choice as well as a prompt one - the two ways of working
+        run on different models - so the live provider is repointed too, and not
+        only the saved setting.
+        """
+        try:
+            self.config.set_value("brain", key)
+        except (KeyError, ValueError) as exc:
+            return {"error": str(exc)}
+
+        brain = brains.get(key)
+        # Ollama users have their own model pulled locally; only the hosted
+        # provider has both of these to choose between.
+        repoint = self.config.provider == "groq" and bool(brain.model)
+        if repoint:
+            self.config.set_active_model(brain.model)
+        self.config.save()
+
+        for session in self.sessions.values():
+            session.agent.set_brain(key)
+            if repoint:
+                try:
+                    session.agent.provider.model = brain.model
+                except Exception:
+                    pass
+        return {"brain": key, "model": self.config.active_model}
+
     def set_mode(self, mode: str) -> dict:
         try:
             self.config.set_value("approval_mode", mode)

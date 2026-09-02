@@ -20,6 +20,7 @@
     yes: $("btn-yes"), no: $("btn-no"), always: $("btn-always"),
     sheetTitle: $("sheet-title"), sheetBody: $("sheet-body"), sheetClose: $("sheet-close"),
     chipMode: $("chip-mode"), chipModel: $("chip-model"), chipCwd: $("chip-cwd"),
+    chipBrain: $("chip-brain"), brainLabel: $("brain-label"),
     chipTools: $("chip-tools"), tokens: $("chip-tokens"), newTab: $("btn-new"),
     modelLabel: $("model-label"), cwdLabel: $("cwd-label"), toolsLabel: $("tools-label"),
     close: $("win-close"), toasts: $("toasts"),
@@ -35,6 +36,7 @@
   const INPUT_MAX = 132;
 
   const state = { tabs: new Map(), active: null, mode: "ask", model: "", pending: null,
+    brain: "direct", brains: [],
                   expanded: false, queued: "", resting: true };
 
   const api = () => window.pywebview && window.pywebview.api;
@@ -441,6 +443,65 @@
     });
   }
 
+  /* Picking how it thinks. Each option carries its own description, and the
+     riskier one repeats its warning when it is chosen - reading it once in a
+     list is not the same as being told at the moment you turn it on. */
+  function showBrains() {
+    openSheet("How Vigil thinks", (body) => {
+      for (const brain of state.brains) {
+        const option = document.createElement("button");
+        option.className = "pick tall" + (brain.key === state.brain ? " on" : "");
+
+        const head = document.createElement("div");
+        head.className = "head";
+        const title = document.createElement("span");
+        title.className = "title";
+        title.textContent = brain.name;
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = brain.tagline;
+        const model = document.createElement("span");
+        model.className = "model";
+        model.textContent = brain.model;
+        head.append(title, tag, model);
+
+        const desc = document.createElement("div");
+        desc.className = "desc";
+        desc.textContent = brain.summary;
+        option.append(head, desc);
+
+        if (brain.warning) {
+          const warn = document.createElement("div");
+          warn.className = "warn";
+          warn.textContent = brain.warning;
+          option.appendChild(warn);
+        }
+
+        option.addEventListener("click", async () => {
+          const result = await api().set_brain(brain.key);
+          if (result.error) { toast(result.error, "error"); return; }
+          applyBrain(result.brain);
+          state.model = result.model;
+          el.modelLabel.textContent = result.model;
+          closeSheet();
+          if (brain.warning) toast(brain.warning, "error");
+          else toast(brain.name + " - " + brain.tagline.toLowerCase());
+        });
+        body.appendChild(option);
+      }
+    });
+  }
+
+  function applyBrain(key) {
+    state.brain = key;
+    const brain = state.brains.find((b) => b.key === key);
+    el.brainLabel.textContent = brain ? brain.name : key;
+    el.chipBrain.classList.toggle("warn", !!(brain && brain.warning));
+    el.chipBrain.title = brain
+      ? brain.name + " - " + brain.summary
+      : "How Vigil thinks";
+  }
+
   async function showTools() {
     const result = await api().tools(state.active || "");
     openSheet("Tools", (body) => {
@@ -634,6 +695,7 @@
   el.newTab.addEventListener("click", newTab);
   el.chipMode.addEventListener("click", cycleMode);
   el.chipModel.addEventListener("click", showModels);
+  el.chipBrain.addEventListener("click", showBrains);
   el.chipTools.addEventListener("click", showTools);
   el.sheetClose.addEventListener("click", closeSheet);
   el.close.addEventListener("click", () => api().hide_window());
@@ -718,6 +780,8 @@
     await api().fit();
     const initial = await api().ready();
     applyMode(initial.mode);
+    state.brains = initial.brains || [];
+    applyBrain(initial.brain || "direct");
     state.model = initial.model;
     el.modelLabel.textContent = initial.model;
 
