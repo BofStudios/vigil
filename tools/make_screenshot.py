@@ -35,6 +35,9 @@ MOCK = """
       // the panel shots show a plan, and only the autonomous brain writes one
       brain: "autonomous",
       history: ["open my downloads folder", "sort my screenshots by month"],
+      setup: location.search.includes("setup")
+        ? { needed: true, provider: "groq", reason: "", host: "http://localhost:11434" }
+        : { needed: false, provider: "groq" },
       brains: [
         { key: "direct", name: "Direct", tagline: "Does what you ask",
           model: "openai/gpt-oss-20b", warning: "",
@@ -57,12 +60,22 @@ MOCK = """
     clipboard_paths: async () => ({ paths: ["C:/notes/plan.md"], text: "C:/notes/plan.md" }),
     describe_image: async () => ({ text: "a bar chart of monthly revenue" }),
     hold() {},
+    connect: async (provider, key) => (key === "bad"
+      ? { error: "That key was not accepted by Groq." }
+      : { ok: true, state: { mode: "ask", brain: "direct", brains: [], model: "openai/gpt-oss-20b",
+                             history: [], setup: { needed: false }, tabs: [] } }),
+    open_url: async () => ({ ok: true }),
     fit: async () => ({ ok: true }),
     expand() {}, collapse() {}, hide_window() {}, show_window() {},
   }};
 
   window.addEventListener("load", () => setTimeout(() => {
     if (location.search.includes("pill")) return;   // leave it resting
+    if (location.search.includes("setup")) {
+      document.getElementById("shell").classList.remove("resting");
+      document.getElementById("shell").classList.add("expanded");
+      return;
+    }
     document.getElementById("shell").classList.remove("resting");
     if (location.search.includes("bar")) {
       document.getElementById("input").value = "sort my screenshots by month";
@@ -142,6 +155,7 @@ def main() -> None:
         ("screenshot.png", "", PANEL_HEIGHT),
         ("approval.png", "?approval=1", PANEL_HEIGHT),
         ("brains.png", "?brains=1", PANEL_HEIGHT),
+        ("setup.png", "?setup=1", PANEL_HEIGHT),
         ("bar.png", "?bar=1", BAR_HEIGHT),
         ("pill.png", "?pill=1", PILL_HEIGHT),
     ]

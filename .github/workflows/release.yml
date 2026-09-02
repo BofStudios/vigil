@@ -1,0 +1,109 @@
+name: release
+
+# Builds the things a buyer downloads. Runs on a tag, and can be run by hand
+# from the Actions tab to check a build without cutting a release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-app:
+    name: windows application
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: install the package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: build Vigil.exe
+        run: python tools/build_app.py --zip
+
+      - name: read the version
+        id: version
+        shell: python
+        run: |
+          import os
+          import pathlib
+
+          text = pathlib.Path("vigil/__init__.py").read_text(encoding="utf-8")
+          version = next(
+              line.split("=", 1)[1].strip().strip('"').strip("'")
+              for line in text.splitlines()
+              if line.startswith("__version__")
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("version=" + version + "\n")
+
+      # Inno Setup is already on the windows runners.
+      - name: build the installer
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=${{ steps.version.outputs.version }} packaging\vigil.iss
+
+      - name: the installer and the portable copy both exist
+        shell: python
+        run: |
+          import pathlib
+          import sys
+
+          built = sorted(p.name for p in pathlib.Path("dist").glob("Vigil-*"))
+          print("\n".join(built))
+          if not any(name.endswith("-setup.exe") for name in built):
+              sys.exit("no installer was produced")
+          if not any(name.endswith("-portable.zip") for name in built):
+              sys.exit("no portable zip was produced")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vigil-windows
+          path: |
+            dist/Vigil-*-windows-setup.exe
+            dist/Vigil-*-windows-portable.zip
+
+      - name: attach them to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          gh release upload ${{ github.ref_name }} `
+            (Get-Item dist/Vigil-*-windows-setup.exe) `
+            (Get-Item dist/Vigil-*-windows-portable.zip) `
+            --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  python-package:
+    name: python package
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: build the wheel and sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vigil-python
+          path: dist/*
+
+      - name: attach them to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: gh release upload ${{ github.ref_name }} dist/* --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

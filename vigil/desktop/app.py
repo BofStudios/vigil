@@ -84,6 +84,7 @@ class Api:
         self.ask_hotkey = None
         self.beacon = None
         self.history = History()
+        self._setup_error = ""
         # approval requests the user has not answered yet; the tray says so,
         # because a run stopped behind a hidden window is the worst case
         self._waiting_on: set = set()
@@ -149,7 +150,7 @@ class Api:
         """Called by the front end once it has booted. Returns the initial state."""
         self._ready.set()
         if not self.sessions:
-            self.new_tab()
+            self.new_tab()      # quietly does nothing when there is no key yet
         return self.state()
 
     def state(self) -> dict:
@@ -168,8 +169,90 @@ class Api:
             "ask_screen": bool(self.ask_hotkey and self.ask_hotkey.registered),
             "autostart": self.autostart_on(),
             "history": list(self.history.items),
+            "setup": self.setup_state(),
             "tabs": [session.describe() for session in self.sessions.values()],
         }
+
+    # ----------------------------------------------------------------- setup
+    def setup_state(self) -> dict:
+        """Whether Vigil can think yet, and what it is missing.
+
+        This is the difference between a developer tool and an application: a
+        missing key is a screen you fill in, not an error printed to a terminal
+        that a double-clicked app does not have.
+        """
+        if self.sessions:
+            return {"needed": False, "provider": self.config.provider}
+        if self.config.provider == "ollama":
+            reason = ("Ollama is not answering at " + self.config.ollama_host
+                      + ". Start it, or use a free Groq key instead.")
+        elif not self.config.api_key:
+            reason = ""
+        else:
+            reason = self._setup_error or "That key was not accepted."
+        return {
+            "needed": True,
+            "provider": self.config.provider,
+            "reason": reason,
+            "host": self.config.ollama_host,
+        }
+
+    def connect(self, provider: str = "groq", key: str = "", host: str = "") -> dict:
+        """Point Vigil at a brain, checking it answers before anything is saved."""
+        provider = (provider or "groq").strip().lower()
+        if provider not in ("groq", "ollama"):
+            return {"error": "Unknown provider: " + provider}
+
+        trial = Config.load()
+        trial.provider = provider
+        if provider == "groq":
+            trial.api_key = (key or "").strip()
+            if not trial.api_key:
+                return {"error": "Paste your key first."}
+        else:
+            trial.ollama_host = (host or "").strip() or trial.ollama_host
+
+        try:
+            checked = build_provider(trial)
+            working, note = checked.check()
+        except Exception as exc:
+            self._setup_error = str(exc)
+            return {"error": str(exc)}
+        if not working:
+            self._setup_error = note
+            return {"error": note}
+
+        # Saved only now, and onto the config the sessions already hold, so a
+        # key changed later reaches the run that is already open.
+        self._setup_error = ""
+        self.config.provider = trial.provider
+        self.config.api_key = trial.api_key
+        self.config.ollama_host = trial.ollama_host
+        self.config.save()
+
+        for session in self.sessions.values():
+            try:
+                session.agent.provider = build_provider(self.config)
+            except ProviderError:
+                pass
+        if not self.sessions:
+            self.new_tab()
+
+        return {"ok": True, "state": self.state()}
+
+    def open_url(self, url: str) -> dict:
+        """Open a link in the real browser. Only the places Vigil knows about."""
+        allowed = ("https://console.groq.com/keys", "https://ollama.com/download",
+                   "https://github.com/BofStudios/vigil")
+        if url not in allowed:
+            return {"error": "not a link Vigil opens"}
+        try:
+            import webbrowser
+
+            webbrowser.open(url)
+        except Exception as exc:
+            return {"error": str(exc)}
+        return {"ok": True}
 
     def fit(self) -> dict:
         """Snap the window to the bar size.

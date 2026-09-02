@@ -417,8 +417,8 @@ def cmd_app(args, config: Config, ui: UI) -> int:
         ui.success("Shortcut created: " + str(path))
         return 0
 
-    if not _require_key(config, ui):
-        return 1
+    # No key gate here on purpose. The app asks for one in its own window - a
+    # double-clicked application has no terminal to print an error to.
     try:
         from .desktop.app import run
     except ImportError as exc:

@@ -853,3 +853,119 @@ html, body {
   .round, .chip, .key { transform: none; }
   .pulse { animation: none; opacity: 0; }
 }
+
+/* ----------------------------------------------------------------- setup */
+/* The first thing a buyer sees. It has to answer three questions without a
+   terminal: what does this need, where do I get it, and did it work. */
+
+.setup {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 26px 34px 34px;
+  text-align: center;
+  overflow-y: auto;
+}
+.setup[hidden] { display: none !important; }
+
+.setup-mark { width: 44px; height: 44px; color: var(--accent); opacity: .9; }
+
+.setup-title {
+  margin: 14px 0 0;
+  font-size: 19px; font-weight: 600; letter-spacing: -.01em;
+  color: var(--text);
+}
+.setup-sub {
+  margin: 9px 0 0;
+  max-width: 46ch;
+  font-size: 12.5px; line-height: 1.6;
+  color: var(--text-dim);
+}
+.setup-note {
+  margin: 0 0 10px;
+  max-width: 44ch;
+  font-size: 12px; line-height: 1.55;
+  color: var(--text-faint);
+}
+
+.setup-tabs {
+  display: flex; gap: 6px;
+  margin: 20px 0 16px;
+  padding: 4px;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  background: var(--sunken);
+}
+.setup-tab {
+  padding: 7px 15px;
+  border: none; border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-faint);
+  font: inherit; font-size: 12px;
+  cursor: pointer;
+  transition: background .2s var(--flow), color .2s var(--flow);
+}
+.setup-tab:hover { color: var(--text-dim); }
+.setup-tab.on { background: var(--surface-2); color: var(--text); }
+
+.setup-pane { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.setup-pane[hidden] { display: none !important; }
+
+.setup-link {
+  margin-bottom: 11px;
+  padding: 0;
+  border: none; background: none;
+  color: var(--text-dim);
+  font: inherit; font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--edge-strong);
+  transition: color .2s var(--flow), border-color .2s var(--flow);
+}
+.setup-link:hover { color: var(--text); border-color: var(--accent); }
+
+.setup-input {
+  width: min(420px, 100%);
+  padding: 11px 14px;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  background: var(--sunken);
+  color: var(--text);
+  font: inherit; font-size: 12.5px;
+  font-family: var(--mono);
+  outline: none;
+  transition: border-color .2s var(--flow);
+}
+.setup-input::placeholder { color: var(--text-faint); font-family: var(--font); }
+.setup-input:focus { border-color: var(--edge-strong); }
+
+.setup-go {
+  margin-top: 16px;
+  padding: 10px 34px;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer;
+  transition: opacity .2s var(--flow), transform .18s var(--flow);
+}
+.setup-go:hover { opacity: .88; }
+.setup-go:disabled { opacity: .5; cursor: default; }
+
+.setup-error {
+  margin: 13px 0 0;
+  max-width: 46ch;
+  font-size: 12px; line-height: 1.55;
+  color: var(--high);
+}
+.setup-error[hidden] { display: none !important; }
+
+/* While the setup screen is up there is nothing to type into the bar about. */
+.needs-setup #input,
+.needs-setup .send,
+.needs-setup .tabrow,
+.needs-setup .footer,
+.needs-setup .plan-strip { display: none !important; }

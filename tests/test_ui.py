@@ -20,11 +20,50 @@ HTML = (WEB / "index.html").read_text(encoding="utf-8")
 
 
 # ------------------------------------------------------------------ static
-def test_the_front_end_still_reaches_no_network():
-    """No CDN, no font host, no analytics. It runs with the machine offline."""
+def test_the_front_end_loads_nothing_from_the_network():
+    """No CDN, no font host, no analytics. It runs with the machine offline.
+
+    Handing a URL to Python to open in the real browser is a different thing and
+    is allowed - that is how the setup screen offers "get a free key".
+    """
     for source in (CSS, JS, HTML):
-        for banned in ("http://", "https://", "//cdn", "fetch(", "XMLHttpRequest"):
+        for banned in ("fetch(", "XMLHttpRequest", "WebSocket", "importScripts",
+                       "//cdn", "@import url("):
             assert banned not in source, banned
+
+    # nothing is fetched by the markup or the stylesheet either
+    for source in (HTML, CSS):
+        for attribute in ('src="http', "src='http", 'href="http', "href='http",
+                          "url(http"):
+            assert attribute not in source, attribute
+
+
+def test_the_only_links_the_page_names_are_ones_python_agrees_to_open():
+    """A link the page offers but the bridge refuses would be a dead button."""
+    import re
+
+    from vigil.config import Config
+    from vigil.desktop.app import Api
+
+    settings = Config()
+    settings.api_key = "not-a-real-key"
+    bridge = Api(settings)
+
+    named = sorted(set(re.findall(r"https?://[^\s\"')]+", JS)))
+    assert named, "the page names no links at all - has the setup screen gone?"
+
+    import webbrowser
+
+    opened = []
+    real_open = webbrowser.open
+    webbrowser.open = opened.append
+    try:
+        for url in named:
+            assert "error" not in bridge.open_url(url), url
+    finally:
+        webbrowser.open = real_open
+
+    assert opened == named
 
 
 def test_there_is_no_framework_hiding_in_here():
@@ -94,7 +133,7 @@ def page():
 
     made = {}
 
-    def open_page(reduced_motion="no-preference"):
+    def open_page(reduced_motion="no-preference", query=""):
         playwright = sync_playwright().start()
         try:
             browser = playwright.chromium.launch()
@@ -111,7 +150,7 @@ def page():
                   lambda m: opened.problems.append((m.type, m.text))
                   if m.type == "error" else None)
         opened.on("pageerror", lambda e: opened.problems.append(("pageerror", str(e))))
-        opened.goto("http://127.0.0.1:" + str(port) + "/__preview.html")
+        opened.goto("http://127.0.0.1:" + str(port) + "/__preview.html" + query)
         opened.wait_for_timeout(900)
         return opened
 
@@ -284,3 +323,71 @@ def test_ordinary_copied_text_is_pasted_as_text(page):
     # replaced it with a path or a description
     assert "C:/notes/plan.md" not in opened.input_value("#input")
     assert "bar chart" not in opened.input_value("#input")
+
+
+# ------------------------------------------------------------- first run
+def test_a_fresh_install_shows_the_setup_screen(page):
+    opened = page(query="?setup=1")
+    opened.wait_for_timeout(500)
+
+    assert opened.is_visible("#setup")
+    assert "needs something to think with" in opened.text_content(".setup-title")
+    assert opened.problems == []
+
+
+def test_the_bar_gets_out_of_the_way_until_it_can_think(page):
+    """Typing into a box that cannot send anything is a dead end."""
+    opened = page(query="?setup=1")
+    opened.wait_for_timeout(400)
+
+    assert opened.eval_on_selector("#shell", "e => e.classList.contains('needs-setup')")
+    assert not opened.is_visible("#input")
+
+
+def test_you_can_choose_to_stay_offline_instead(page):
+    opened = page(query="?setup=1")
+    opened.wait_for_timeout(400)
+
+    opened.click("#setup-ollama")
+    opened.wait_for_timeout(150)
+    assert opened.is_visible("#setup-host")
+    assert not opened.is_visible("#setup-key")
+    assert "nothing is sent anywhere" in opened.text_content("#setup-sub")
+
+
+def test_a_key_that_works_puts_the_screen_away(page):
+    opened = page(query="?setup=1")
+    opened.wait_for_timeout(400)
+
+    opened.fill("#setup-key", "gsk_a_key_that_works")
+    opened.click("#setup-go")
+    opened.wait_for_timeout(600)
+
+    assert not opened.is_visible("#setup")
+    assert opened.is_visible("#input")
+    assert opened.problems == []
+
+
+def test_a_key_that_is_refused_says_why_and_stays_put(page):
+    opened = page(query="?setup=1")
+    opened.wait_for_timeout(400)
+
+    opened.fill("#setup-key", "bad")
+    opened.click("#setup-go")
+    opened.wait_for_timeout(500)
+
+    assert opened.is_visible("#setup")
+    assert "not accepted" in opened.text_content("#setup-error")
+    # and the button comes back rather than staying stuck on "Checking…"
+    assert opened.text_content("#setup-go").strip() == "Connect"
+    assert opened.eval_on_selector("#setup-go", "e => e.disabled") is False
+
+
+def test_enter_connects_too(page):
+    opened = page(query="?setup=1")
+    opened.wait_for_timeout(400)
+
+    opened.fill("#setup-key", "gsk_works")
+    opened.press("#setup-key", "Enter")
+    opened.wait_for_timeout(600)
+    assert not opened.is_visible("#setup")

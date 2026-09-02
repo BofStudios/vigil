@@ -14,6 +14,9 @@
     planStrip: $("plan-strip"), planList: $("plan-list"),
     planCount: $("plan-count"), planBar: $("plan-bar"),
     scrim: $("scrim"), approval: $("approval"), sheet: $("sheet"),
+    setup: $("setup"), setupSub: $("setup-sub"), setupKey: $("setup-key"),
+    setupHost: $("setup-host"), setupGo: $("setup-go"), setupError: $("setup-error"),
+    paneGroq: $("pane-groq"), paneOllama: $("pane-ollama"),
     risk: $("approval-risk"), tool: $("approval-tool"),
     summary: $("approval-summary"), reason: $("approval-reason"),
     detail: $("approval-detail"),
@@ -47,8 +50,6 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-  /** A deliberately small markdown subset. Everything is escaped first, so no
-   *  model output can inject markup. */
   /* ------------------------------------------------------------- motion */
   /* Decoration, kept in one place and switched off wholesale for anyone whose
      system asks for less movement. Nothing here changes what anything does. */
@@ -147,6 +148,8 @@
     node.classList.add("rolling");
   }
 
+  /** A deliberately small markdown subset. Everything is escaped first, so no
+   *  model output can inject markup. */
   function renderMarkdown(raw) {
     const blocks = [];
     const stripped = String(raw ?? "").replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
@@ -857,6 +860,22 @@
   el.chipMode.addEventListener("click", cycleMode);
   el.chipModel.addEventListener("click", showModels);
   el.chipBrain.addEventListener("click", showBrains);
+  el.setupGo.addEventListener("click", connect);
+  el.setupKey.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); connect(); }
+  });
+  el.setupHost.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); connect(); }
+  });
+  for (const tab of document.querySelectorAll(".setup-tab")) {
+    tab.addEventListener("click", () => pickProvider(tab.dataset.provider));
+  }
+  $("setup-getkey").addEventListener("click", () => {
+    api().open_url("https://console.groq.com/keys");
+  });
+  $("setup-getollama").addEventListener("click", () => {
+    api().open_url("https://ollama.com/download");
+  });
   el.chipTools.addEventListener("click", showTools);
   el.sheetClose.addEventListener("click", closeSheet);
   el.close.addEventListener("click", () => api().hide_window());
@@ -978,25 +997,88 @@
   magnetise(footer);
   magnetise(el.approval);
 
-  // ---------------------------------------------------------------- boot
-  async function boot() {
-    // the initial window size is not honoured for a frameless window; one
-    // resize after boot snaps it to the bar
-    await api().fit();
-    const initial = await api().ready();
+  /* -------------------------------------------------------------- setup */
+  /* Vigil is an application, so a missing key is a screen you fill in rather
+     than an error printed to a terminal that nobody is looking at. */
+
+  let setupProvider = "groq";
+
+  function showSetup(setup) {
+    const needed = !!(setup && setup.needed);
+    el.shell.classList.toggle("needs-setup", needed);
+    el.setup.hidden = !needed;
+    if (!needed) return;
+
+    expand();
+    setupProvider = setup.provider === "ollama" ? "ollama" : "groq";
+    pickProvider(setupProvider);
+    if (setup.host) el.setupHost.placeholder = setup.host;
+    if (setup.reason) {
+      el.setupError.textContent = setup.reason;
+      el.setupError.hidden = false;
+    }
+    setTimeout(() => {
+      (setupProvider === "groq" ? el.setupKey : el.setupHost).focus();
+    }, 260);
+  }
+
+  function pickProvider(name) {
+    setupProvider = name;
+    for (const tab of document.querySelectorAll(".setup-tab")) {
+      tab.classList.toggle("on", tab.dataset.provider === name);
+    }
+    el.paneGroq.hidden = name !== "groq";
+    el.paneOllama.hidden = name !== "ollama";
+    el.setupSub.textContent = name === "groq"
+      ? "A Groq key is free and takes about thirty seconds. Nothing leaves your "
+        + "machine except what you ask Vigil to do."
+      : "Ollama runs the model on this computer, so nothing is sent anywhere at all.";
+  }
+
+  async function connect() {
+    el.setupError.hidden = true;
+    el.setupGo.disabled = true;
+    el.setupGo.textContent = "Checking…";
+
+    const result = await api().connect(
+      setupProvider,
+      el.setupKey.value.trim(),
+      el.setupHost.value.trim(),
+    );
+
+    el.setupGo.disabled = false;
+    el.setupGo.textContent = "Connect";
+
+    if (!result || result.error) {
+      el.setupError.textContent = (result && result.error) || "That did not work.";
+      el.setupError.hidden = false;
+      return;
+    }
+
+    el.setupKey.value = "";
+    applyState(result.state);
+    toast("connected");
+  }
+
+  /** Draw everything the Python side just told us. Used at boot, and again
+   *  the moment a key is accepted, so the app fills in without a restart. */
+  function applyState(initial) {
+    if (!initial) return;
     applyMode(initial.mode);
     state.brains = initial.brains || [];
     state.history = initial.history || [];
     applyBrain(initial.brain || "direct");
     state.model = initial.model;
     el.modelLabel.textContent = initial.model;
+    showSetup(initial.setup);
 
     for (const info of initial.tabs || []) {
+      if (state.tabs.has(info.id)) continue;
       makeTab(info);
       roll(el.toolsLabel, info.tools + " tools");
     }
     const first = initial.tabs && initial.tabs[0];
-    if (first) {
+    if (first && !state.active) {
       state.active = first.id;
       const tab = state.tabs.get(first.id);
       tab.thread.hidden = false;
@@ -1005,14 +1087,24 @@
       renderTabs();
       setBusy(false);
     }
-    if (initial.warning) toast(initial.warning, "error");
-    flushQueued();
+
     const hints = [];
     if (initial.hotkey) hints.push("Ctrl+Shift+Space");
     if (initial.voice) hints.push("hold " + (initial.voice_key || "right ctrl") + " to talk");
     el.input.placeholder = hints.length
       ? "Ask Vigil anything…   (" + hints.join(" · ") + ")"
       : "Ask Vigil anything…";
+  }
+
+  // ---------------------------------------------------------------- boot
+  async function boot() {
+    // the initial window size is not honoured for a frameless window; one
+    // resize after boot snaps it to the bar
+    await api().fit();
+    const initial = await api().ready();
+    applyState(initial);
+    if (initial.warning) toast(initial.warning, "error");
+    flushQueued();
     requestAnimationFrame(autoGrow);
   }
 
