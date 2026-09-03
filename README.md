@@ -17,6 +17,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![Groq](https://img.shields.io/badge/AI-Groq%20(free)-orange)](https://console.groq.com/keys)
+[![Claude](https://img.shields.io/badge/AI-Claude-cfae6a)](https://console.anthropic.com/settings/keys)
 [![Ollama](https://img.shields.io/badge/AI-Ollama%20(local)-black)](https://ollama.com)
 
 *by [BOF Studios](https://github.com/BofStudios)*
@@ -55,8 +56,8 @@ vigil
 Moved 7 PDF files into the invoices folder. No PDFs left on the desktop.
 ```
 
-It runs on **Groq**'s free API tier, or fully offline through **Ollama** — no credit card,
-no subscription.
+It runs on **Groq**'s free API tier, on your own **Claude** key, or fully offline through
+**Ollama**. The free route needs no credit card and no subscription.
 
 ---
 
@@ -70,7 +71,7 @@ no subscription.
 | **Circle and ask** | Ctrl+Shift+A, draw around anything on screen, and it tells you what it is. |
 | **Recall and paste** | Up walks back through what you asked before. Copy a file in Explorer, paste it in, and it has the path. |
 | **Hold a key and talk** | Speech goes to Whisper and lands in the box as text. The mic is only ever open while you hold the key. |
-| **Free** | Groq's free tier is enough, and the key takes 30 seconds to get. Or stay entirely offline with Ollama. |
+| **Free, or yours** | Start on Groq's free tier, bring your own Claude key, or stay entirely offline with Ollama. You choose on the first screen. |
 | **Safe** | Every risky step is put to you for approval. Some actions never run, in any mode. |
 | **Transparent** | You see each step as it happens, and every decision is written to an audit log. |
 | **It plans** | Multi-step jobs get a visible checklist, ticked off as the work happens. |
@@ -94,14 +95,17 @@ Windows 10 or 11. Everything the app needs is inside it, including Python.
 
 ### The key, on the first screen
 
-Vigil needs something to think with, and it asks in its own window:
+Vigil needs something to think with, and it asks in its own window. Three ways in:
 
-1. **Get a free key →** opens `console.groq.com/keys` (signing in with Google is enough)
-2. **Create API Key** → copy it
-3. Paste it into the box and press **Connect**
+| | | |
+|---|---|---|
+| **Free** | Groq's free tier, and it stays free | `gpt-oss-20b` and `gpt-oss-120b` — the two the brain picker moves between |
+| **Claude** | your own Anthropic key | `claude-sonnet-5`, `claude-opus-5`, `claude-haiku-4.5` |
+| **Offline** | nothing leaves the machine | whatever you have pulled with Ollama |
 
-Nothing is written to disk until that key has actually answered. Or choose **Ollama** on the
-same screen and stay entirely offline — then nothing is sent anywhere at all.
+The **Get a key →** link opens the right console for whichever you picked. Paste it, press
+**Connect**, and the app fills in without a restart. Nothing is written to disk until that key
+has actually answered — a key that is refused says why and leaves the screen up.
 
 ### From pip, for developers
 
@@ -140,10 +144,10 @@ vigil app --install-shortcut     # put Vigil on your desktop, with its icon
 vigil app --autostart on         # and start it when you log in
 ```
 
-At rest it is a small pill at the top of the screen — a mark and a name, nothing to read.
-Move the pointer near it and it opens into the bar; ask it something and it grows into a
-panel; press Escape and it folds back. Near-black surfaces, hairline highlights, no
-gradients: light behaves like a reflection rather than a fill.
+At rest it is a small capsule at the top of the screen holding the mark, and nothing else —
+no name, no status dot, nothing moving. Something that sits on your screen all day should not
+be talking while it waits. Move the pointer near it and it opens into the bar; ask it
+something and it grows into a panel; press Escape and it folds back.
 
 <img src="docs/screenshot.png" alt="The bar expanded, mid-task" width="760">
 
@@ -225,7 +229,7 @@ vigil audit -n 30                      # recent security decisions
 vigil config set model openai/gpt-oss-120b
 ```
 
-Flags: `--provider groq|ollama`, `--model <name>`, `--brain direct|autonomous`,
+Flags: `--provider groq|anthropic|ollama`, `--model <name>`, `--brain direct|autonomous`,
 `--mode ask|auto|yolo`, `--yolo`, `--cwd <path>`, `--no-gui`, `--no-browser`,
 `--no-stream`, `--quiet`
 
@@ -236,7 +240,7 @@ In-chat commands:
 | `/help` | list commands |
 | `/tools` | loaded tools |
 | `/model [name]` | show or change the model |
-| `/provider [groq\|ollama]` | switch the AI provider |
+| `/provider [groq\|anthropic\|ollama]` | switch the AI provider |
 | `/mode ask\|auto\|yolo` | change the approval mode |
 | `/brain direct\|autonomous` | change how it thinks |
 | `/cwd [path]` | change the working directory |
@@ -546,7 +550,9 @@ Settings live in `~/.vigil/config.json`.
 
 | Key | Default | Description |
 |---|---|---|
-| `provider` | `groq` | `groq` or `ollama` |
+| `provider` | `groq` | `groq`, `anthropic` or `ollama` |
+| `anthropic_api_key` | `""` | your own Claude key |
+| `anthropic_model` | `claude-sonnet-5` | which Claude to use |
 | `model` | `openai/gpt-oss-120b` | Groq main model |
 | `vision_model` | `qwen/qwen3.8-27b` | Groq vision model |
 | `ollama_host` | `http://localhost:11434` | Ollama address |
@@ -618,6 +624,7 @@ See [docs/architecture.md](docs/architecture.md) for the design,
 - [x] A light around the screen while it has the controls
 - [x] Starts with the machine, one instance, every monitor
 - [x] A real Windows application: installer, no Python, key on the first screen
+- [x] Bring your own Claude key
 - [ ] The control light on macOS
 - [ ] A signed installer, so SmartScreen stops asking
 - [ ] Scheduled tasks (`vigil schedule`)

@@ -73,31 +73,16 @@
               stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
         <circle cx="128" cy="115.7" r="11" fill="currentColor"/>
       </svg>
-      <h1 class="setup-title">Vigil needs something to think with</h1>
-      <p class="setup-sub" id="setup-sub">
-        A Groq key is free and takes about thirty seconds. Nothing leaves your
-        machine except what you ask Vigil to do.
-      </p>
+      <h1 class="setup-title">Enter your API key</h1>
+      <p class="setup-lead">or start on a free one</p>
 
-      <div class="setup-tabs">
-        <button class="setup-tab on" id="setup-groq" data-provider="groq">Groq · free</button>
-        <button class="setup-tab" id="setup-ollama" data-provider="ollama">Ollama · offline</button>
-      </div>
+      <div class="setup-tabs" id="setup-tabs"></div>
+      <p class="setup-sub" id="setup-sub"></p>
+      <ul class="setup-models" id="setup-models"></ul>
 
-      <div class="setup-pane" id="pane-groq">
-        <button class="setup-link" id="setup-getkey">Get a free key →</button>
-        <input class="setup-input" id="setup-key" type="password" spellcheck="false"
-               autocomplete="off" placeholder="Paste your key here">
-      </div>
-
-      <div class="setup-pane" id="pane-ollama" hidden>
-        <p class="setup-note">
-          Ollama runs the model on this machine. Nothing is sent anywhere at all.
-        </p>
-        <button class="setup-link" id="setup-getollama">Install Ollama →</button>
-        <input class="setup-input" id="setup-host" type="text" spellcheck="false"
-               autocomplete="off" placeholder="http://localhost:11434">
-      </div>
+      <button class="setup-link" id="setup-link"></button>
+      <input class="setup-input" id="setup-key" type="password" spellcheck="false"
+             autocomplete="off" placeholder="Paste your key here">
 
       <button class="setup-go" id="setup-go">Connect</button>
       <p class="setup-error" id="setup-error" hidden></p>

@@ -21,7 +21,9 @@ DEFAULT_MODEL = "openai/gpt-oss-120b"
 DEFAULT_VISION_MODEL = "qwen/qwen3.8-27b"
 
 APPROVAL_MODES = ("ask", "auto", "yolo")
-PROVIDERS = ("groq", "ollama")
+PROVIDERS = ("groq", "anthropic", "ollama")
+
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
 
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
 DEFAULT_OLLAMA_MODEL = "qwen3:8b"
@@ -32,7 +34,7 @@ DEFAULT_OLLAMA_VISION_MODEL = "llama3.2-vision"
 class Config:
     """User settings. Every field can be changed with `vigil config set <key> <value>`."""
 
-    provider: str = "groq"  # groq | ollama
+    provider: str = "groq"  # groq | anthropic | ollama
     api_key: str = ""
     model: str = DEFAULT_MODEL
     vision_model: str = DEFAULT_VISION_MODEL
@@ -60,6 +62,10 @@ class Config:
     # ctrl+shift+A: circle something on screen and ask about it
     enable_ask_screen: bool = True
     enable_plugins: bool = True
+    # bring your own Claude; not free, but it is what people who already pay
+    # for a key want to point at their own machine
+    anthropic_api_key: str = ""
+    anthropic_model: str = DEFAULT_ANTHROPIC_MODEL
     ollama_host: str = DEFAULT_OLLAMA_HOST
     ollama_model: str = DEFAULT_OLLAMA_MODEL
     ollama_vision_model: str = DEFAULT_OLLAMA_VISION_MODEL
@@ -93,6 +99,8 @@ class Config:
             self.approval_mode = os.environ["VIGIL_APPROVAL_MODE"]
         if os.environ.get("VIGIL_PROVIDER") in PROVIDERS:
             self.provider = os.environ["VIGIL_PROVIDER"]
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            self.anthropic_api_key = os.environ["ANTHROPIC_API_KEY"]
         if os.environ.get("OLLAMA_HOST"):
             self.ollama_host = os.environ["OLLAMA_HOST"]
 
@@ -140,16 +148,26 @@ class Config:
     @property
     def active_model(self) -> str:
         """Main model of the selected provider."""
-        return self.ollama_model if self.provider == "ollama" else self.model
+        if self.provider == "ollama":
+            return self.ollama_model
+        if self.provider == "anthropic":
+            return self.anthropic_model
+        return self.model
 
     @property
     def active_vision_model(self) -> str:
         """Vision model of the selected provider."""
-        return self.ollama_vision_model if self.provider == "ollama" else self.vision_model
+        if self.provider == "ollama":
+            return self.ollama_vision_model
+        if self.provider == "anthropic":
+            return self.anthropic_model      # Claude sees for itself
+        return self.vision_model
 
     def set_active_model(self, name: str) -> None:
         if self.provider == "ollama":
             self.ollama_model = name
+        elif self.provider == "anthropic":
+            self.anthropic_model = name
         else:
             self.model = name
 

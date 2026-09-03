@@ -19,8 +19,8 @@ WEB = ROOT / "vigil" / "desktop" / "web"
 DOCS = ROOT / "docs"
 PORT = 8911
 
-PILL_WIDTH = 208
-PILL_HEIGHT = 46
+PILL_WIDTH = 92
+PILL_HEIGHT = 38
 BAR_WIDTH = 720
 BAR_HEIGHT = 68
 PANEL_HEIGHT = 620
@@ -36,7 +36,27 @@ MOCK = """
       brain: "autonomous",
       history: ["open my downloads folder", "sort my screenshots by month"],
       setup: location.search.includes("setup")
-        ? { needed: true, provider: "groq", reason: "", host: "http://localhost:11434" }
+        ? { needed: true, provider: "groq", reason: "", host: "http://localhost:11434",
+            routes: [
+              { key: "groq", name: "Free", badge: "no card", needs_key: true,
+                blurb: "Groq's free tier, and it stays free. Two models come with it - Vigil moves between them when you switch how it thinks.",
+                models: [{ id: "openai/gpt-oss-20b", note: "fast, for everyday jobs" },
+                         { id: "openai/gpt-oss-120b", note: "stronger, for problems" }],
+                link: "https://console.groq.com/keys", link_text: "Get a free key",
+                placeholder: "gsk_..." },
+              { key: "anthropic", name: "Claude", badge: "your key", needs_key: true,
+                blurb: "Bring your own Anthropic key and Vigil runs on Claude. Not free, but it is the strongest thing you can point at your own machine.",
+                models: [{ id: "claude-sonnet-5", note: "Balanced: the one to use (default)" },
+                         { id: "claude-opus-5", note: "Most capable, and the slowest" },
+                         { id: "claude-haiku-4-5-20251001", note: "Fast and cheap, still calls tools" }],
+                link: "https://console.anthropic.com/settings/keys", link_text: "Get a Claude key",
+                placeholder: "sk-ant-..." },
+              { key: "ollama", name: "Offline", badge: "local", needs_key: false,
+                blurb: "Ollama runs the model on this computer. Nothing is sent anywhere at all - no key, no account, no network.",
+                models: [{ id: "qwen3:8b", note: "pull it with: ollama pull qwen3:8b" }],
+                link: "https://ollama.com/download", link_text: "Install Ollama",
+                placeholder: "http://localhost:11434" },
+            ] }
         : { needed: false, provider: "groq" },
       brains: [
         { key: "direct", name: "Direct", tagline: "Does what you ask",

@@ -30,6 +30,7 @@ APP = DIST / "Vigil"
 # note in the spec file.
 NEEDED = [
     "pyinstaller>=6.0",
+    "anthropic>=0.40",
     "pywebview>=5.0",
     "pystray>=0.19",
     "pillow>=10.0.0",

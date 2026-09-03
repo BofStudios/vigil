@@ -141,6 +141,31 @@ def test_a_provider_nobody_has_heard_of_is_refused(blank):
     assert "Unknown provider" in api.connect("skynet", "x")["error"]
 
 
+def test_a_claude_key_goes_to_the_claude_field(blank, monkeypatch):
+    """Not into the Groq one, which would then be quietly wrong."""
+    monkeypatch.setattr(app_module, "build_provider", lambda config: _Provider())
+    api = Api(blank)
+
+    result = api.connect("anthropic", "sk-ant-something")
+
+    assert result["ok"] is True
+    assert api.config.anthropic_api_key == "sk-ant-something"
+    assert api.config.api_key == ""
+    assert api.config.provider == "anthropic"
+
+
+def test_claude_with_no_key_is_caught_too(blank):
+    api = Api(blank)
+    assert api.connect("anthropic", "")["error"] == "Paste your key first."
+
+
+def test_the_first_screen_offers_three_ways_in(blank):
+    offered = Api(blank).state()["setup"]["routes"]
+    assert [route["key"] for route in offered] == ["groq", "anthropic", "ollama"]
+    assert offered[0]["models"], "the free route should name what it gives you"
+    assert offered[2]["needs_key"] is False
+
+
 def test_changing_the_key_later_reaches_the_session_already_open(ready, monkeypatch):
     """Otherwise the running tab keeps using the key you just replaced."""
     monkeypatch.setattr(app_module, "build_provider", lambda config: _Provider())
@@ -216,3 +241,53 @@ def test_a_terminal_session_still_wants_one_up_front():
         encoding="utf-8"
     )
     assert "_require_key" in _function(cli, "cmd_chat")
+
+
+# -------------------------------------------------------------- the routes
+def test_free_is_offered_first_and_is_the_default():
+    """It is the honest answer to "do I have to pay for this"."""
+    from vigil import routes
+
+    assert routes.ALL[0].key == "groq"
+    assert routes.DEFAULT == "groq"
+
+
+def test_every_route_can_be_drawn():
+    from vigil.routes import routes
+
+    for route in routes():
+        for field in ("key", "name", "badge", "blurb", "placeholder"):
+            assert route[field], (route["key"], field)
+        assert isinstance(route["models"], list)
+
+
+def test_only_the_offline_route_needs_no_key():
+    from vigil.routes import routes
+
+    needs = {route["key"]: route["needs_key"] for route in routes()}
+    assert needs == {"groq": True, "anthropic": True, "ollama": False}
+
+
+def test_the_free_route_names_the_two_models_the_brains_use():
+    """The picker promise and the brain models have to be the same two."""
+    from vigil import brains
+    from vigil.routes import FREE
+
+    offered = [model for model, _note in FREE.models]
+    assert offered == [brains.get("direct").model, brains.get("autonomous").model]
+
+
+def test_an_unknown_route_falls_back_to_the_free_one():
+    from vigil.routes import get
+
+    assert get("wormhole").key == "groq"
+    assert get("").key == "groq"
+    assert get(None).key == "groq"
+
+
+def test_the_route_keys_are_real_providers():
+    from vigil.config import PROVIDERS
+    from vigil.routes import routes
+
+    for route in routes():
+        assert route["key"] in PROVIDERS, route["key"]

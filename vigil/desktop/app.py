@@ -20,8 +20,9 @@ import time
 from pathlib import Path
 
 from .. import __version__, brains
-from ..config import Config, ensure_dirs
+from ..config import PROVIDERS, Config, ensure_dirs
 from ..providers import ProviderError, build_provider, provider_notes
+from ..routes import routes
 from . import native, recall
 from .glow import light as control_light
 from .recall import History
@@ -38,8 +39,8 @@ ICON = ASSETS_DIR / "vigil.ico"
 WINDOW_TITLE = "Vigil"
 # Three shapes: a pill that sits out of the way, the bar you type into, and
 # the panel the work appears in.
-PILL_WIDTH = 208
-PILL_HEIGHT = 46
+PILL_WIDTH = 92
+PILL_HEIGHT = 38
 BAR_WIDTH = 720
 BAR_HEIGHT = 68
 PANEL_HEIGHT = 620
@@ -51,6 +52,8 @@ TOP_MARGIN = 14
 REACH_IN = 8
 REACH_OUT = 90
 WATCH_INTERVAL = 0.06
+# how many quiet polls a wrong window size has to survive before it is fixed
+DRIFT_PATIENCE = 8
 
 # set VIGIL_DEBUG_POINTER=1 to watch the hover logic decide
 _POINTER_DEBUG = bool(os.environ.get("VIGIL_DEBUG_POINTER"))
@@ -185,8 +188,10 @@ class Api:
             return {"needed": False, "provider": self.config.provider}
         if self.config.provider == "ollama":
             reason = ("Ollama is not answering at " + self.config.ollama_host
-                      + ". Start it, or use a free Groq key instead.")
-        elif not self.config.api_key:
+                      + ". Start it, or use a free key instead.")
+        elif self.config.provider == "anthropic" and not self.config.anthropic_api_key:
+            reason = ""
+        elif self.config.provider == "groq" and not self.config.api_key:
             reason = ""
         else:
             reason = self._setup_error or "That key was not accepted."
@@ -195,12 +200,13 @@ class Api:
             "provider": self.config.provider,
             "reason": reason,
             "host": self.config.ollama_host,
+            "routes": routes(),
         }
 
     def connect(self, provider: str = "groq", key: str = "", host: str = "") -> dict:
         """Point Vigil at a brain, checking it answers before anything is saved."""
         provider = (provider or "groq").strip().lower()
-        if provider not in ("groq", "ollama"):
+        if provider not in PROVIDERS:
             return {"error": "Unknown provider: " + provider}
 
         trial = Config.load()
@@ -208,6 +214,10 @@ class Api:
         if provider == "groq":
             trial.api_key = (key or "").strip()
             if not trial.api_key:
+                return {"error": "Paste your key first."}
+        elif provider == "anthropic":
+            trial.anthropic_api_key = (key or "").strip()
+            if not trial.anthropic_api_key:
                 return {"error": "Paste your key first."}
         else:
             trial.ollama_host = (host or "").strip() or trial.ollama_host
@@ -227,6 +237,7 @@ class Api:
         self._setup_error = ""
         self.config.provider = trial.provider
         self.config.api_key = trial.api_key
+        self.config.anthropic_api_key = trial.anthropic_api_key
         self.config.ollama_host = trial.ollama_host
         self.config.save()
 
@@ -242,7 +253,9 @@ class Api:
 
     def open_url(self, url: str) -> dict:
         """Open a link in the real browser. Only the places Vigil knows about."""
-        allowed = ("https://console.groq.com/keys", "https://ollama.com/download",
+        allowed = ("https://console.groq.com/keys",
+                   "https://console.anthropic.com/settings/keys",
+                   "https://ollama.com/download",
                    "https://github.com/BofStudios/vigil")
         if url not in allowed:
             return {"error": "not a link Vigil opens"}
@@ -254,6 +267,14 @@ class Api:
             return {"error": str(exc)}
         return {"ok": True}
 
+    def expected_size(self) -> tuple:
+        """The size this state is supposed to be."""
+        if self.expanded:
+            return BAR_WIDTH, PANEL_HEIGHT
+        if self.resting:
+            return PILL_WIDTH, PILL_HEIGHT
+        return BAR_WIDTH, BAR_HEIGHT
+
     def fit(self) -> dict:
         """Snap the window to the bar size.
 
@@ -261,12 +282,7 @@ class Api:
         it comes out at min_size - but resize() sets the viewport exactly, so one
         call after boot puts things right.
         """
-        if self.expanded:
-            width, height = BAR_WIDTH, PANEL_HEIGHT
-        elif self.resting:
-            width, height = PILL_WIDTH, PILL_HEIGHT
-        else:
-            width, height = BAR_WIDTH, BAR_HEIGHT
+        width, height = self.expected_size()
         try:
             self.window.resize(width, height)
             self.window.move(max(0, (self.screen_width - width) // 2), TOP_MARGIN)
@@ -293,17 +309,35 @@ class Api:
                 return
 
             steps = 14
-            for index in range(1, steps + 1):
-                progress = _ease_out(index / steps)
-                current_w = round(start_w + (width - start_w) * progress)
-                current_h = round(start_h + (height - start_h) * progress)
-                try:
+            try:
+                for index in range(1, steps + 1):
+                    progress = _ease_out(index / steps)
+                    current_w = round(start_w + (width - start_w) * progress)
+                    current_h = round(start_h + (height - start_h) * progress)
                     self.window.resize(current_w, current_h)
                     if current_w != start_w:
-                        self.window.move(max(0, (self.screen_width - current_w) // 2), TOP_MARGIN)
-                except Exception:
-                    return
-                time.sleep(duration / steps)
+                        self.window.move(
+                            max(0, (self.screen_width - current_w) // 2), TOP_MARGIN
+                        )
+                    time.sleep(duration / steps)
+            except Exception:
+                pass
+            finally:
+                # However that went, the window ends up the size it was asked
+                # for. A resize that threw part-way used to abandon the
+                # animation where it stood, leaving the panel squeezed into a
+                # couple of hundred pixels with no way back.
+                self._snap(width, height)
+
+    def _snap(self, width: int, height: int) -> None:
+        """Put the window at exactly this size, centred. Never raises."""
+        if self.window is None:
+            return
+        try:
+            self.window.resize(width, height)
+            self.window.move(max(0, (self.screen_width - width) // 2), TOP_MARGIN)
+        except Exception:
+            pass
 
     def _shape(self, width: int, height: int) -> None:
         threading.Thread(target=self._animate_to, args=(width, height), daemon=True).start()
@@ -722,9 +756,30 @@ def _watch_pointer(api: Api) -> None:
     polling the cursor is both dependable and closer to what we want anyway:
     the bar can react to the pointer approaching, not just landing on it.
     """
+    drifted_for = 0
+
     while True:
         time.sleep(WATCH_INTERVAL)
-        if not api.visible or api.expanded or api.window is None:
+        if not api.visible or api.window is None:
+            continue
+
+        # Self-healing. If the window is not the size its state calls for -
+        # a resize that failed, a display change, anything - put it right.
+        # Given a moment's grace first, so this never fights an animation.
+        actual = native.window_rect(api.hwnd)
+        if actual is not None and not api._resizing.locked():
+            wanted_w, wanted_h = api.expected_size()
+            width = actual[2] - actual[0]
+            height = actual[3] - actual[1]
+            if abs(width - wanted_w) > 8 or abs(height - wanted_h) > 8:
+                drifted_for += 1
+                if drifted_for >= DRIFT_PATIENCE:
+                    api._snap(wanted_w, wanted_h)
+                    drifted_for = 0
+            else:
+                drifted_for = 0
+
+        if api.expanded:
             continue
 
         point = native.cursor_position()
@@ -808,9 +863,10 @@ def run(config: Config = None, debug: bool = False) -> int:
         "js_api": api,
         "width": PILL_WIDTH,
         "height": PILL_HEIGHT,
-        # the default minimum is (200, 100), which silently makes the collapsed
-        # bar a third taller than it should be
-        "min_size": (180, 40),
+        # The default minimum is (200, 100), which silently clamps the resting
+        # capsule to something much bigger than it is meant to be. It has to be
+        # under PILL_WIDTH x PILL_HEIGHT or the pill can never reach its size.
+        "min_size": (PILL_WIDTH - 12, PILL_HEIGHT - 6),
         "x": max(0, (screen_width - PILL_WIDTH) // 2),
         "y": TOP_MARGIN,
         "frameless": True,

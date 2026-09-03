@@ -204,9 +204,10 @@ html, body {
 .mode-yolo .mode-dot i { background: var(--high); animation: breathe 2s var(--flow) infinite; }
 
 /* ------------------------------------------------------------- resting */
-/* At rest the window is a small pill: the mark, the name, nothing to read.
-   The pointer arriving is what opens it, so it never sits there demanding
-   attention. */
+/* At rest the window is a small capsule holding the mark, and nothing else.
+   No name, no status dot, no sweep of light across a word: an application that
+   sits on your screen all day should not be saying anything while it waits.
+   Everything it has to tell you happens once you go to it. */
 .pill-hint {
   flex: 1 1 auto;
   font-size: 13px;
@@ -219,42 +220,36 @@ html, body {
   pointer-events: none;
   white-space: nowrap;
 }
-.resting .pill-hint { opacity: 1; transform: none; }
 
-/* A highlight crosses the wordmark every few seconds. This is the one place a
-   moving gradient belongs: it is not a fill, it is a reflection, and it is the
-   same thing the surface does when you tilt a piece of polished steel. */
-.pill-hint {
-  background: linear-gradient(
-    100deg,
-    var(--text-dim) 40%,
-    var(--text) 48%,
-    #ffffff 50%,
-    var(--text) 52%,
-    var(--text-dim) 60%
-  );
-  background-size: 260% 100%;
-  background-position: 160% 0;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+.resting .bar {
+  /* the bar is a fixed 68px tall when it is a bar; at rest it has to be the
+     height of the capsule instead, or the mark sits below the middle */
+  flex: 1 1 auto;
+  height: 100%;
+  gap: 0;
+  padding: 0;
+  justify-content: center;
 }
-.resting .pill-hint { animation: sheen 6.5s var(--flow) infinite; }
-@keyframes sheen {
-  0%        { background-position: 160% 0; }
-  32%, 100% { background-position: -60% 0; }
+.resting #input,
+.resting .pill-hint,
+.resting .bar-actions,
+.resting .voice-hint { display: none; }
+
+/* The mark sits on its own, a touch larger, because it is the only thing there. */
+.resting .grip { width: 100%; height: 100%; }
+.resting .mark { width: 19px; height: 19px; opacity: .82; }
+.resting:hover .mark { opacity: 1; }
+
+/* A capsule, not a box. The strong top highlight that gives the panel its edge
+   reads as a hard border at this size, so the resting shell gets a fainter one
+   and a shadow that sits closer underneath it. */
+.resting.shell {
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .05),
+    inset 0 1px 0 0 rgba(255, 255, 255, .10),
+    0 8px 22px rgba(0, 0, 0, .55);
 }
-
-.resting .bar { gap: 10px; padding: 0 16px 0 17px; }
-.resting #input { display: none; }
-.resting .bar-actions { gap: 0; }
-.resting .send,
-.resting .stop,
-.resting #win-close { display: none; }
-.resting .mode-dot { opacity: .8; }
-
-/* the pill is a smaller object, so its corners are smaller too */
-.resting.shell { border-radius: 23px; }
 
 /* --------------------------------------------------------------- voice */
 /* While the talk key is held the bar says so plainly. A microphone that is
@@ -295,15 +290,20 @@ html, body {
 
 /* ----------------------------------------------------------------- panel */
 .panel {
-  flex: 1 1 auto;
+  /* Takes no room at all until it is wanted. Fading it out was not enough:
+     it still claimed flex space, so in a window that had not finished growing
+     the panel and the bar fought over the same few pixels and the result was
+     the conversation squeezed into a box of its own. */
+  flex: 0 0 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
   padding: 0 8px 8px;
   opacity: 0;
+  overflow: hidden;
   transition: opacity .3s var(--flow);
 }
-.expanded .panel { opacity: 1; }
+.expanded .panel { flex: 1 1 auto; opacity: 1; }
 
 /* --------------------------------------------------------------- tab row */
 .tabrow {
@@ -847,7 +847,7 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   .msg, .tool, .note, .plan-item, .rolling { animation: none; }
-  .resting .pill-hint, .working .mark, .working .mark .trace { animation: none; }
+  .working .mark, .working .mark .trace { animation: none; }
   .mark .trace { opacity: 0; }
   .bar::after, .footer::after { display: none; }
   .round, .chip, .key { transform: none; }
@@ -863,59 +863,97 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding: 26px 34px 34px;
+  /* "safe" so that when the content is taller than the panel it starts at the
+     top and scrolls, rather than centring and clipping its own head off */
+  justify-content: safe center;
+  padding: 16px 34px 22px;
   text-align: center;
   overflow-y: auto;
 }
 .setup[hidden] { display: none !important; }
 
-.setup-mark { width: 44px; height: 44px; color: var(--accent); opacity: .9; }
+/* flex:none throughout - these are flex items in a column that can overflow,
+   and without it the browser shrinks them to nothing rather than scrolling */
+.setup-mark {
+  flex: none;
+  width: 34px; height: 34px;
+  color: var(--accent); opacity: .9;
+}
+.setup-title, .setup-lead, .setup-tabs, .setup-sub,
+.setup-models, .setup-link, .setup-input, .setup-go { flex: none; }
 
 .setup-title {
-  margin: 14px 0 0;
-  font-size: 19px; font-weight: 600; letter-spacing: -.01em;
+  margin: 11px 0 0;
+  font-size: 19px; font-weight: 600; letter-spacing: -.015em;
   color: var(--text);
 }
-.setup-sub {
-  margin: 9px 0 0;
-  max-width: 46ch;
-  font-size: 12.5px; line-height: 1.6;
-  color: var(--text-dim);
-}
-.setup-note {
-  margin: 0 0 10px;
-  max-width: 44ch;
-  font-size: 12px; line-height: 1.55;
+.setup-lead {
+  margin: 5px 0 0;
+  font-size: 13px;
   color: var(--text-faint);
 }
 
 .setup-tabs {
-  display: flex; gap: 6px;
-  margin: 20px 0 16px;
+  display: flex; gap: 5px;
+  margin: 16px 0 12px;
   padding: 4px;
   border: 1px solid var(--edge);
   border-radius: var(--r-md);
   background: var(--sunken);
 }
 .setup-tab {
-  padding: 7px 15px;
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 7px 14px;
   border: none; border-radius: var(--r-sm);
   background: none;
   color: var(--text-faint);
-  font: inherit; font-size: 12px;
+  font: inherit; font-size: 12.5px;
   cursor: pointer;
   transition: background .2s var(--flow), color .2s var(--flow);
 }
 .setup-tab:hover { color: var(--text-dim); }
 .setup-tab.on { background: var(--surface-2); color: var(--text); }
+.setup-tab .badge {
+  font-size: 10px; letter-spacing: .04em;
+  color: var(--text-faint);
+}
+.setup-tab.on .badge { color: var(--moderate); }
 
-.setup-pane { display: flex; flex-direction: column; align-items: center; width: 100%; }
-.setup-pane[hidden] { display: none !important; }
+.setup-sub {
+  margin: 0;
+  max-width: 58ch;
+  font-size: 12.5px; line-height: 1.6;
+  color: var(--text-dim);
+}
+
+/* What you get on this route. Named, so nobody has to guess what they signed
+   up to - and on the free tier these are exactly the two the brain picker
+   moves between. */
+.setup-models {
+  list-style: none;
+  margin: 11px 0 0;
+  padding: 7px 14px;
+  width: min(430px, 100%);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  background: var(--sunken);
+  text-align: left;
+}
+.setup-models li {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 2px 0;
+  font-size: 11.5px; line-height: 1.5;
+}
+.setup-models .id {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.setup-models .note { color: var(--text-faint); }
+.setup-models[hidden] { display: none !important; }
 
 .setup-link {
-  margin-bottom: 11px;
+  margin: 12px 0 9px;
   padding: 0;
   border: none; background: none;
   color: var(--text-dim);
@@ -927,7 +965,7 @@ html, body {
 .setup-link:hover { color: var(--text); border-color: var(--accent); }
 
 .setup-input {
-  width: min(420px, 100%);
+  width: min(430px, 100%);
   padding: 11px 14px;
   border: 1px solid var(--edge);
   border-radius: var(--r-md);
@@ -938,11 +976,11 @@ html, body {
   outline: none;
   transition: border-color .2s var(--flow);
 }
-.setup-input::placeholder { color: var(--text-faint); font-family: var(--font); }
+.setup-input::placeholder { color: var(--text-faint); }
 .setup-input:focus { border-color: var(--edge-strong); }
 
 .setup-go {
-  margin-top: 16px;
+  margin-top: 13px;
   padding: 10px 34px;
   border: 1px solid var(--edge-strong);
   border-radius: var(--r-md);
@@ -950,14 +988,14 @@ html, body {
   color: var(--accent-ink);
   font: inherit; font-size: 12.5px; font-weight: 600;
   cursor: pointer;
-  transition: opacity .2s var(--flow), transform .18s var(--flow);
+  transition: opacity .2s var(--flow);
 }
 .setup-go:hover { opacity: .88; }
 .setup-go:disabled { opacity: .5; cursor: default; }
 
 .setup-error {
   margin: 13px 0 0;
-  max-width: 46ch;
+  max-width: 48ch;
   font-size: 12px; line-height: 1.55;
   color: var(--high);
 }

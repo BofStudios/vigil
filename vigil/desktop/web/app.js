@@ -15,8 +15,9 @@
     planCount: $("plan-count"), planBar: $("plan-bar"),
     scrim: $("scrim"), approval: $("approval"), sheet: $("sheet"),
     setup: $("setup"), setupSub: $("setup-sub"), setupKey: $("setup-key"),
-    setupHost: $("setup-host"), setupGo: $("setup-go"), setupError: $("setup-error"),
-    paneGroq: $("pane-groq"), paneOllama: $("pane-ollama"),
+    setupGo: $("setup-go"), setupError: $("setup-error"),
+    setupTabs: $("setup-tabs"), setupModels: $("setup-models"),
+    setupLink: $("setup-link"),
     risk: $("approval-risk"), tool: $("approval-tool"),
     summary: $("approval-summary"), reason: $("approval-reason"),
     detail: $("approval-detail"),
@@ -864,17 +865,8 @@
   el.setupKey.addEventListener("keydown", (event) => {
     if (event.key === "Enter") { event.preventDefault(); connect(); }
   });
-  el.setupHost.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") { event.preventDefault(); connect(); }
-  });
-  for (const tab of document.querySelectorAll(".setup-tab")) {
-    tab.addEventListener("click", () => pickProvider(tab.dataset.provider));
-  }
-  $("setup-getkey").addEventListener("click", () => {
-    api().open_url("https://console.groq.com/keys");
-  });
-  $("setup-getollama").addEventListener("click", () => {
-    api().open_url("https://ollama.com/download");
+  el.setupLink.addEventListener("click", () => {
+    if (route && route.link) api().open_url(route.link);
   });
   el.chipTools.addEventListener("click", showTools);
   el.sheetClose.addEventListener("click", closeSheet);
@@ -999,9 +991,12 @@
 
   /* -------------------------------------------------------------- setup */
   /* Vigil is an application, so a missing key is a screen you fill in rather
-     than an error printed to a terminal that nobody is looking at. */
+     than an error printed to a terminal that nobody is looking at. The routes
+     come from Python, so the words here and what pressing Connect does cannot
+     drift apart. */
 
-  let setupProvider = "groq";
+  let route = null;
+  let routes = [];
 
   function showSetup(setup) {
     const needed = !!(setup && setup.needed);
@@ -1010,40 +1005,80 @@
     if (!needed) return;
 
     expand();
-    setupProvider = setup.provider === "ollama" ? "ollama" : "groq";
-    pickProvider(setupProvider);
-    if (setup.host) el.setupHost.placeholder = setup.host;
+    routes = (setup.routes && setup.routes.length) ? setup.routes : routes;
+    drawTabs();
+    pickRoute(setup.provider || (routes[0] && routes[0].key) || "groq");
+
     if (setup.reason) {
       el.setupError.textContent = setup.reason;
       el.setupError.hidden = false;
     }
-    setTimeout(() => {
-      (setupProvider === "groq" ? el.setupKey : el.setupHost).focus();
-    }, 260);
+    setTimeout(() => el.setupKey.focus(), 260);
   }
 
-  function pickProvider(name) {
-    setupProvider = name;
-    for (const tab of document.querySelectorAll(".setup-tab")) {
-      tab.classList.toggle("on", tab.dataset.provider === name);
+  function drawTabs() {
+    el.setupTabs.innerHTML = "";
+    for (const option of routes) {
+      const tab = document.createElement("button");
+      tab.className = "setup-tab";
+      tab.dataset.route = option.key;
+
+      const name = document.createElement("span");
+      name.textContent = option.name;
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = option.badge;
+      tab.append(name, badge);
+
+      tab.addEventListener("click", () => pickRoute(option.key));
+      el.setupTabs.appendChild(tab);
     }
-    el.paneGroq.hidden = name !== "groq";
-    el.paneOllama.hidden = name !== "ollama";
-    el.setupSub.textContent = name === "groq"
-      ? "A Groq key is free and takes about thirty seconds. Nothing leaves your "
-        + "machine except what you ask Vigil to do."
-      : "Ollama runs the model on this computer, so nothing is sent anywhere at all.";
+  }
+
+  function pickRoute(key) {
+    route = routes.find((option) => option.key === key) || routes[0];
+    if (!route) return;
+
+    for (const tab of el.setupTabs.querySelectorAll(".setup-tab")) {
+      tab.classList.toggle("on", tab.dataset.route === route.key);
+    }
+
+    el.setupSub.textContent = route.blurb;
+
+    el.setupModels.innerHTML = "";
+    el.setupModels.hidden = !(route.models && route.models.length);
+    for (const model of route.models || []) {
+      const row = document.createElement("li");
+      const id = document.createElement("span");
+      id.className = "id";
+      id.textContent = model.id;
+      const note = document.createElement("span");
+      note.className = "note";
+      note.textContent = model.note;
+      row.append(id, note);
+      el.setupModels.appendChild(row);
+    }
+
+    el.setupLink.textContent = route.link_text + " →";
+    el.setupLink.hidden = !route.link;
+
+    el.setupKey.value = "";
+    el.setupKey.type = route.needs_key ? "password" : "text";
+    el.setupKey.placeholder = route.placeholder;
+    el.setupError.hidden = true;
   }
 
   async function connect() {
+    if (!route) return;
     el.setupError.hidden = true;
     el.setupGo.disabled = true;
     el.setupGo.textContent = "Checking…";
 
+    const typed = el.setupKey.value.trim();
     const result = await api().connect(
-      setupProvider,
-      el.setupKey.value.trim(),
-      el.setupHost.value.trim(),
+      route.key,
+      route.needs_key ? typed : "",
+      route.needs_key ? "" : typed,
     );
 
     el.setupGo.disabled = false;

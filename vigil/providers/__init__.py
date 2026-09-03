@@ -3,6 +3,7 @@
 To add a provider: implement the `Provider` class, then wire it into `build_provider`.
 """
 
+from .anthropic_provider import AnthropicProvider
 from .base import (
     AssistantMessage,
     AuthError,
@@ -19,7 +20,14 @@ from .ollama_provider import OllamaProvider
 
 def build_provider(config):
     """Create the provider selected by the `provider` field in the config."""
-    if getattr(config, "provider", "groq") == "ollama":
+    chosen = getattr(config, "provider", "groq")
+    if chosen == "anthropic":
+        return AnthropicProvider(
+            api_key=config.anthropic_api_key,
+            model=config.anthropic_model,
+            temperature=config.temperature,
+        )
+    if chosen == "ollama":
         return OllamaProvider(
             host=config.ollama_host,
             model=config.ollama_model,
@@ -36,7 +44,11 @@ def build_provider(config):
 
 def provider_notes(config) -> str:
     """Warning text for the selected model (no tool or vision support)."""
-    provider_class = OllamaProvider if getattr(config, "provider", "groq") == "ollama" else GroqProvider
+    chosen = getattr(config, "provider", "groq")
+    provider_class = {
+        "ollama": OllamaProvider,
+        "anthropic": AnthropicProvider,
+    }.get(chosen, GroqProvider)
     model = config.active_model
     if not provider_class.supports_tools(model):
         return (
@@ -47,6 +59,7 @@ def provider_notes(config) -> str:
 
 
 __all__ = [
+    "AnthropicProvider",
     "AssistantMessage",
     "AuthError",
     "GroqProvider",

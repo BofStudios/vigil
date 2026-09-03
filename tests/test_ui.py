@@ -38,32 +38,41 @@ def test_the_front_end_loads_nothing_from_the_network():
             assert attribute not in source, attribute
 
 
-def test_the_only_links_the_page_names_are_ones_python_agrees_to_open():
-    """A link the page offers but the bridge refuses would be a dead button."""
-    import re
+def test_every_link_the_first_screen_offers_is_one_python_will_open():
+    """A link the screen offers but the bridge refuses would be a dead button.
+
+    The links live in routes.py rather than in the page, so this checks the two
+    sides of that agree.
+    """
+    import webbrowser
 
     from vigil.config import Config
     from vigil.desktop.app import Api
+    from vigil.routes import routes
 
     settings = Config()
     settings.api_key = "not-a-real-key"
     bridge = Api(settings)
 
-    named = sorted(set(re.findall(r"https?://[^\s\"')]+", JS)))
-    assert named, "the page names no links at all - has the setup screen gone?"
-
-    import webbrowser
+    offered = [route["link"] for route in routes() if route["link"]]
+    assert offered, "no route offers anywhere to get a key"
 
     opened = []
     real_open = webbrowser.open
     webbrowser.open = opened.append
     try:
-        for url in named:
+        for url in offered:
             assert "error" not in bridge.open_url(url), url
     finally:
         webbrowser.open = real_open
+    assert opened == offered
 
-    assert opened == named
+
+def test_the_page_itself_hard_codes_no_links():
+    """Everything it can open comes from Python, so the two cannot drift."""
+    import re
+
+    assert re.findall(r"https?://[^\s\"')]+", JS) == []
 
 
 def test_there_is_no_framework_hiding_in_here():
@@ -87,11 +96,16 @@ def test_the_mark_has_a_stroke_for_the_light_to_travel_along():
     assert "@keyframes trace" in CSS
 
 
-def test_the_moving_highlight_is_only_on_the_wordmark():
-    """The surfaces stay matte; a reflection on lettering is a different thing."""
-    sheen = CSS[CSS.index("@keyframes sheen"):]
-    assert "background-position" in sheen
-    assert "linear-gradient" not in sheen  # the gradient is on the text, not here
+def test_the_resting_capsule_says_nothing_at_all():
+    """It sits on screen all day. It should not be talking while it waits."""
+    start = CSS.index("resting */")
+    resting = CSS[start:CSS.index("voice */", start)]
+
+    # the name, the input, the buttons and the mode dot are all put away
+    assert ".resting .pill-hint" in resting
+    assert "display: none" in resting
+    assert "border-radius: 999px" in resting       # a capsule, not a box
+    assert "@keyframes sheen" not in CSS           # and no light sweeps across it
 
 
 def test_nothing_in_the_motion_layer_changes_what_anything_does():
@@ -331,7 +345,7 @@ def test_a_fresh_install_shows_the_setup_screen(page):
     opened.wait_for_timeout(500)
 
     assert opened.is_visible("#setup")
-    assert "needs something to think with" in opened.text_content(".setup-title")
+    assert "Enter your API key" in opened.text_content(".setup-title")
     assert opened.problems == []
 
 
@@ -344,15 +358,51 @@ def test_the_bar_gets_out_of_the_way_until_it_can_think(page):
     assert not opened.is_visible("#input")
 
 
+def test_the_free_route_names_the_models_it_gives_you(page):
+    """Nobody should have to guess what they just signed up to."""
+    opened = page(query="?setup=1")
+    opened.wait_for_timeout(400)
+
+    listed = opened.eval_on_selector_all(
+        "#setup-models .id", "els => els.map(e => e.textContent)")
+    assert listed == ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
+
+
+def test_you_can_bring_your_own_claude(page):
+    opened = page(query="?setup=1")
+    opened.wait_for_timeout(400)
+
+    opened.click('.setup-tab[data-route="anthropic"]')
+    opened.wait_for_timeout(200)
+
+    assert "Claude" in opened.text_content("#setup-sub") or         "Anthropic" in opened.text_content("#setup-sub")
+    assert opened.eval_on_selector("#setup-key", "e => e.placeholder").startswith("sk-ant")
+    listed = opened.eval_on_selector_all(
+        "#setup-models .id", "els => els.map(e => e.textContent)")
+    assert "claude-sonnet-5" in listed
+
+
 def test_you_can_choose_to_stay_offline_instead(page):
     opened = page(query="?setup=1")
     opened.wait_for_timeout(400)
 
-    opened.click("#setup-ollama")
-    opened.wait_for_timeout(150)
-    assert opened.is_visible("#setup-host")
-    assert not opened.is_visible("#setup-key")
-    assert "nothing is sent anywhere" in opened.text_content("#setup-sub")
+    opened.click('.setup-tab[data-route="ollama"]')
+    opened.wait_for_timeout(200)
+
+    assert "nothing is sent anywhere" in opened.text_content("#setup-sub").lower()
+    # the offline route takes an address, not a secret, so it is not masked
+    assert opened.eval_on_selector("#setup-key", "e => e.type") == "text"
+
+
+def test_switching_route_clears_whatever_was_typed(page):
+    """A key pasted for one provider must not be sent to another."""
+    opened = page(query="?setup=1")
+    opened.wait_for_timeout(400)
+
+    opened.fill("#setup-key", "gsk_secret")
+    opened.click('.setup-tab[data-route="anthropic"]')
+    opened.wait_for_timeout(200)
+    assert opened.input_value("#setup-key") == ""
 
 
 def test_a_key_that_works_puts_the_screen_away(page):

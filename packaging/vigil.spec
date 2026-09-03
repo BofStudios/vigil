@@ -34,6 +34,7 @@ hiddenimports = [
     "vigil.tools.planner",
     "vigil.tools.memory_tools",
     "vigil.tools.browser",
+    "vigil.providers.anthropic_provider",
     "vigil.providers.groq_provider",
     "vigil.providers.ollama_provider",
 ]
