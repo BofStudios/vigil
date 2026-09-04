@@ -18,6 +18,7 @@
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![Groq](https://img.shields.io/badge/AI-Groq%20(free)-orange)](https://console.groq.com/keys)
 [![Claude](https://img.shields.io/badge/AI-Claude-cfae6a)](https://console.anthropic.com/settings/keys)
+[![OpenAI](https://img.shields.io/badge/AI-OpenAI-7fb289)](https://platform.openai.com/api-keys)
 [![Ollama](https://img.shields.io/badge/AI-Ollama%20(local)-black)](https://ollama.com)
 
 *by [BOF Studios](https://github.com/BofStudios)*
@@ -100,7 +101,7 @@ Windows 10 or 11. Everything the app needs is inside it, including Python.
 
 ### The key, on the first screen
 
-Vigil needs something to think with, and it asks in its own window. Three ways in:
+Vigil needs something to think with, and it asks in its own window. Four ways in:
 
 | | | |
 |---|---|---|
