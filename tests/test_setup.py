@@ -159,11 +159,26 @@ def test_claude_with_no_key_is_caught_too(blank):
     assert api.connect("anthropic", "")["error"] == "Paste your key first."
 
 
-def test_the_first_screen_offers_three_ways_in(blank):
+def test_an_openai_key_goes_to_the_openai_field(blank, monkeypatch):
+    """Vigil is the harness, so the newest model from anywhere can run in it."""
+    monkeypatch.setattr(app_module, "build_provider", lambda config: _Provider())
+    api = Api(blank)
+
+    result = api.connect("openai", "sk-proj-something")
+
+    assert result["ok"] is True
+    assert api.config.openai_api_key == "sk-proj-something"
+    assert api.config.api_key == ""
+    assert api.config.anthropic_api_key == ""
+    assert api.config.provider == "openai"
+
+
+def test_the_first_screen_offers_every_way_in(blank):
     offered = Api(blank).state()["setup"]["routes"]
-    assert [route["key"] for route in offered] == ["groq", "anthropic", "ollama"]
+    assert [route["key"] for route in offered] == [
+        "groq", "anthropic", "openai", "ollama"]
     assert offered[0]["models"], "the free route should name what it gives you"
-    assert offered[2]["needs_key"] is False
+    assert offered[-1]["needs_key"] is False
 
 
 def test_changing_the_key_later_reaches_the_session_already_open(ready, monkeypatch):
@@ -265,7 +280,8 @@ def test_only_the_offline_route_needs_no_key():
     from vigil.routes import routes
 
     needs = {route["key"]: route["needs_key"] for route in routes()}
-    assert needs == {"groq": True, "anthropic": True, "ollama": False}
+    assert needs == {"groq": True, "anthropic": True,
+                     "openai": True, "ollama": False}
 
 
 def test_the_free_route_names_the_two_models_the_brains_use():

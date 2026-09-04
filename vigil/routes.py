@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 
 from .config import DEFAULT_ANTHROPIC_MODEL, DEFAULT_MODEL, DEFAULT_OLLAMA_MODEL
 from .providers.anthropic_provider import KNOWN_MODELS as CLAUDE_MODELS
+from .providers.openai_provider import KNOWN_MODELS as OPENAI_MODELS
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,21 @@ CLAUDE = Route(
     placeholder="sk-ant-…",
 )
 
+GPT = Route(
+    key="openai",
+    name="GPT",
+    badge="your key",
+    blurb=(
+        "Your own OpenAI key. Vigil is the harness, not the model - when a lab "
+        "ships something better at driving a computer, you run it in here, "
+        "behind the same approvals and the same blocked actions."
+    ),
+    models=[(model, note) for model, note in list(OPENAI_MODELS.items())[:3]],
+    link="https://platform.openai.com/api-keys",
+    link_text="Get an OpenAI key",
+    placeholder="sk-…",
+)
+
 OFFLINE = Route(
     key="ollama",
     name="Offline",
@@ -91,7 +107,7 @@ OFFLINE = Route(
     needs_key=False,
 )
 
-ALL = (FREE, CLAUDE, OFFLINE)
+ALL = (FREE, CLAUDE, GPT, OFFLINE)
 DEFAULT = FREE.key
 
 
@@ -109,5 +125,5 @@ def get(key: str) -> Route:
     return FREE
 
 
-__all__ = ["ALL", "CLAUDE", "DEFAULT", "DEFAULT_ANTHROPIC_MODEL", "FREE",
+__all__ = ["ALL", "CLAUDE", "DEFAULT", "DEFAULT_ANTHROPIC_MODEL", "FREE", "GPT",
            "OFFLINE", "Route", "get", "routes"]

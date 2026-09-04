@@ -21,9 +21,10 @@ DEFAULT_MODEL = "openai/gpt-oss-120b"
 DEFAULT_VISION_MODEL = "qwen/qwen3.8-27b"
 
 APPROVAL_MODES = ("ask", "auto", "yolo")
-PROVIDERS = ("groq", "anthropic", "ollama")
+PROVIDERS = ("groq", "anthropic", "openai", "ollama")
 
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
+DEFAULT_OPENAI_MODEL = "gpt-6-astra"
 
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
 DEFAULT_OLLAMA_MODEL = "qwen3:8b"
@@ -34,7 +35,7 @@ DEFAULT_OLLAMA_VISION_MODEL = "llama3.2-vision"
 class Config:
     """User settings. Every field can be changed with `vigil config set <key> <value>`."""
 
-    provider: str = "groq"  # groq | anthropic | ollama
+    provider: str = "groq"  # groq | anthropic | openai | ollama
     api_key: str = ""
     model: str = DEFAULT_MODEL
     vision_model: str = DEFAULT_VISION_MODEL
@@ -66,6 +67,11 @@ class Config:
     # for a key want to point at their own machine
     anthropic_api_key: str = ""
     anthropic_model: str = DEFAULT_ANTHROPIC_MODEL
+    # OpenAI, or anything that speaks its API: set openai_base_url to point at
+    # OpenRouter, a local vLLM, or any other compatible endpoint
+    openai_api_key: str = ""
+    openai_model: str = DEFAULT_OPENAI_MODEL
+    openai_base_url: str = ""
     ollama_host: str = DEFAULT_OLLAMA_HOST
     ollama_model: str = DEFAULT_OLLAMA_MODEL
     ollama_vision_model: str = DEFAULT_OLLAMA_VISION_MODEL
@@ -101,6 +107,10 @@ class Config:
             self.provider = os.environ["VIGIL_PROVIDER"]
         if os.environ.get("ANTHROPIC_API_KEY"):
             self.anthropic_api_key = os.environ["ANTHROPIC_API_KEY"]
+        if os.environ.get("OPENAI_API_KEY"):
+            self.openai_api_key = os.environ["OPENAI_API_KEY"]
+        if os.environ.get("OPENAI_BASE_URL"):
+            self.openai_base_url = os.environ["OPENAI_BASE_URL"]
         if os.environ.get("OLLAMA_HOST"):
             self.ollama_host = os.environ["OLLAMA_HOST"]
 
@@ -152,6 +162,8 @@ class Config:
             return self.ollama_model
         if self.provider == "anthropic":
             return self.anthropic_model
+        if self.provider == "openai":
+            return self.openai_model
         return self.model
 
     @property
@@ -161,6 +173,8 @@ class Config:
             return self.ollama_vision_model
         if self.provider == "anthropic":
             return self.anthropic_model      # Claude sees for itself
+        if self.provider == "openai":
+            return self.openai_model         # so does this one
         return self.vision_model
 
     def set_active_model(self, name: str) -> None:
@@ -168,6 +182,8 @@ class Config:
             self.ollama_model = name
         elif self.provider == "anthropic":
             self.anthropic_model = name
+        elif self.provider == "openai":
+            self.openai_model = name
         else:
             self.model = name
 

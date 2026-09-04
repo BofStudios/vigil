@@ -191,6 +191,8 @@ class Api:
                       + ". Start it, or use a free key instead.")
         elif self.config.provider == "anthropic" and not self.config.anthropic_api_key:
             reason = ""
+        elif self.config.provider == "openai" and not self.config.openai_api_key:
+            reason = ""
         elif self.config.provider == "groq" and not self.config.api_key:
             reason = ""
         else:
@@ -219,6 +221,10 @@ class Api:
             trial.anthropic_api_key = (key or "").strip()
             if not trial.anthropic_api_key:
                 return {"error": "Paste your key first."}
+        elif provider == "openai":
+            trial.openai_api_key = (key or "").strip()
+            if not trial.openai_api_key:
+                return {"error": "Paste your key first."}
         else:
             trial.ollama_host = (host or "").strip() or trial.ollama_host
 
@@ -238,6 +244,7 @@ class Api:
         self.config.provider = trial.provider
         self.config.api_key = trial.api_key
         self.config.anthropic_api_key = trial.anthropic_api_key
+        self.config.openai_api_key = trial.openai_api_key
         self.config.ollama_host = trial.ollama_host
         self.config.save()
 
@@ -255,6 +262,7 @@ class Api:
         """Open a link in the real browser. Only the places Vigil knows about."""
         allowed = ("https://console.groq.com/keys",
                    "https://console.anthropic.com/settings/keys",
+                   "https://platform.openai.com/api-keys",
                    "https://ollama.com/download",
                    "https://github.com/BofStudios/vigil")
         if url not in allowed:

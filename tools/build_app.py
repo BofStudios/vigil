@@ -31,6 +31,7 @@ APP = DIST / "Vigil"
 NEEDED = [
     "pyinstaller>=6.0",
     "anthropic>=0.40",
+    "openai>=1.40",
     "pywebview>=5.0",
     "pystray>=0.19",
     "pillow>=10.0.0",

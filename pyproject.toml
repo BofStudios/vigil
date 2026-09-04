@@ -42,6 +42,7 @@ gui = [
   "pygetwindow>=0.0.9; sys_platform == 'win32'",
 ]
 claude = ["anthropic>=0.40"]
+openai = ["openai>=1.40"]
 browser = ["playwright>=1.44.0"]
 voice = ["sounddevice>=0.4.6", "pynput>=1.7"]
 desktop = [
@@ -54,6 +55,7 @@ desktop = [
 ]
 all = [
   "anthropic>=0.40",
+  "openai>=1.40",
   "pyautogui>=0.9.54",
   "pillow>=10.0.0",
   "mss>=9.0.1",

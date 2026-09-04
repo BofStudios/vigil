@@ -56,8 +56,12 @@ vigil
 Moved 7 PDF files into the invoices folder. No PDFs left on the desktop.
 ```
 
-It runs on **Groq**'s free API tier, on your own **Claude** key, or fully offline through
-**Ollama**. The free route needs no credit card and no subscription.
+It runs on **Groq**'s free API tier, on your own **Claude** or **OpenAI** key, or fully
+offline through **Ollama**. The free route needs no credit card and no subscription.
+
+**Vigil is the harness, not the model.** When a lab ships something better at driving a
+computer, you point Vigil at it — and it runs behind the same approvals, the same blocked
+actions and the same audit log as everything else.
 
 ---
 
@@ -71,7 +75,8 @@ It runs on **Groq**'s free API tier, on your own **Claude** key, or fully offlin
 | **Circle and ask** | Ctrl+Shift+A, draw around anything on screen, and it tells you what it is. |
 | **Recall and paste** | Up walks back through what you asked before. Copy a file in Explorer, paste it in, and it has the path. |
 | **Hold a key and talk** | Speech goes to Whisper and lands in the box as text. The mic is only ever open while you hold the key. |
-| **Free, or yours** | Start on Groq's free tier, bring your own Claude key, or stay entirely offline with Ollama. You choose on the first screen. |
+| **Any model, one harness** | Free on Groq, your own Claude or OpenAI key, or fully offline. Anything OpenAI-compatible works too. You choose on the first screen. |
+| **It never bypasses your defences** | Disabling antivirus, the firewall, UAC or restore points is permanently blocked — in every mode, on every model. |
 | **Safe** | Every risky step is put to you for approval. Some actions never run, in any mode. |
 | **Transparent** | You see each step as it happens, and every decision is written to an audit log. |
 | **It plans** | Multi-step jobs get a visible checklist, ticked off as the work happens. |
@@ -101,7 +106,15 @@ Vigil needs something to think with, and it asks in its own window. Three ways i
 |---|---|---|
 | **Free** | Groq's free tier, and it stays free | `gpt-oss-20b` and `gpt-oss-120b` — the two the brain picker moves between |
 | **Claude** | your own Anthropic key | `claude-sonnet-5`, `claude-opus-5`, `claude-haiku-4.5` |
+| **GPT** | your own OpenAI key | `gpt-6-astra`, `gpt-5.2`, `gpt-5.2-mini` |
 | **Offline** | nothing leaves the machine | whatever you have pulled with Ollama |
+
+The GPT route also takes a `base_url`, so it reaches anything that speaks the same
+API — OpenRouter, a local vLLM, LM Studio, Together:
+
+```bash
+vigil config set openai_base_url https://openrouter.ai/api/v1
+```
 
 The **Get a key →** link opens the right console for whichever you picked. Paste it, press
 **Connect**, and the app fills in without a restart. Nothing is written to disk until that key
@@ -229,7 +242,7 @@ vigil audit -n 30                      # recent security decisions
 vigil config set model openai/gpt-oss-120b
 ```
 
-Flags: `--provider groq|anthropic|ollama`, `--model <name>`, `--brain direct|autonomous`,
+Flags: `--provider groq|anthropic|openai|ollama`, `--model <name>`, `--brain direct|autonomous`,
 `--mode ask|auto|yolo`, `--yolo`, `--cwd <path>`, `--no-gui`, `--no-browser`,
 `--no-stream`, `--quiet`
 
@@ -240,7 +253,7 @@ In-chat commands:
 | `/help` | list commands |
 | `/tools` | loaded tools |
 | `/model [name]` | show or change the model |
-| `/provider [groq\|anthropic\|ollama]` | switch the AI provider |
+| `/provider [groq\|anthropic\|openai\|ollama]` | switch the AI provider |
 | `/mode ask\|auto\|yolo` | change the approval mode |
 | `/brain direct\|autonomous` | change how it thinks |
 | `/cwd [path]` | change the working directory |
@@ -550,7 +563,10 @@ Settings live in `~/.vigil/config.json`.
 
 | Key | Default | Description |
 |---|---|---|
-| `provider` | `groq` | `groq`, `anthropic` or `ollama` |
+| `provider` | `groq` | `groq`, `anthropic`, `openai` or `ollama` |
+| `openai_api_key` | `""` | your own OpenAI key |
+| `openai_model` | `gpt-6-astra` | which one to use |
+| `openai_base_url` | `""` | any OpenAI-compatible endpoint |
 | `anthropic_api_key` | `""` | your own Claude key |
 | `anthropic_model` | `claude-sonnet-5` | which Claude to use |
 | `model` | `openai/gpt-oss-120b` | Groq main model |
@@ -625,6 +641,7 @@ See [docs/architecture.md](docs/architecture.md) for the design,
 - [x] Starts with the machine, one instance, every monitor
 - [x] A real Windows application: installer, no Python, key on the first screen
 - [x] Bring your own Claude key
+- [x] Bring your own OpenAI key, or any OpenAI-compatible endpoint
 - [ ] The control light on macOS
 - [ ] A signed installer, so SmartScreen stops asking
 - [ ] Scheduled tasks (`vigil schedule`)

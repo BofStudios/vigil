@@ -37,6 +37,7 @@ hiddenimports = [
     "vigil.providers.anthropic_provider",
     "vigil.providers.groq_provider",
     "vigil.providers.ollama_provider",
+    "vigil.providers.openai_provider",
 ]
 hiddenimports += collect_submodules("webview")
 hiddenimports += collect_submodules("pystray")

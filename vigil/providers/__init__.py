@@ -16,6 +16,7 @@ from .base import (
 )
 from .groq_provider import KNOWN_MODELS, GroqProvider
 from .ollama_provider import OllamaProvider
+from .openai_provider import OpenAIProvider
 
 
 def build_provider(config):
@@ -26,6 +27,13 @@ def build_provider(config):
             api_key=config.anthropic_api_key,
             model=config.anthropic_model,
             temperature=config.temperature,
+        )
+    if chosen == "openai":
+        return OpenAIProvider(
+            api_key=config.openai_api_key,
+            model=config.openai_model,
+            temperature=config.temperature,
+            base_url=config.openai_base_url,
         )
     if chosen == "ollama":
         return OllamaProvider(
@@ -48,6 +56,7 @@ def provider_notes(config) -> str:
     provider_class = {
         "ollama": OllamaProvider,
         "anthropic": AnthropicProvider,
+        "openai": OpenAIProvider,
     }.get(chosen, GroqProvider)
     model = config.active_model
     if not provider_class.supports_tools(model):
@@ -65,6 +74,7 @@ __all__ = [
     "GroqProvider",
     "KNOWN_MODELS",
     "OllamaProvider",
+    "OpenAIProvider",
     "Provider",
     "ProviderError",
     "RateLimitError",
