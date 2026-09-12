@@ -447,3 +447,54 @@ def test_the_desktop_modules_import_on_a_machine_that_is_not_windows():
     )
     assert finished.returncode == 0, finished.stderr[-2000:]
     assert "ok" in finished.stdout
+
+
+def test_the_window_ground_matches_the_stylesheet():
+    """A mismatch shows as a grey rim around the shell's rounded corners.
+
+    The window is painted by the toolkit before the page loads and shows
+    wherever the page's own rounded shape does not cover it. It has to be the
+    same colour as --bg or the app looks like it has a border it never drew.
+    """
+    from pathlib import Path
+
+    from vigil.desktop.app import BACKGROUND
+
+    css = (Path(__file__).resolve().parent.parent / "vigil" / "desktop" / "web"
+           / "style.css").read_text(encoding="utf-8")
+    ground = next(row for row in css.splitlines() if "--bg:" in row)
+    assert BACKGROUND.lower() in ground.lower(), (BACKGROUND, ground.strip())
+
+
+def test_the_bar_is_centred_on_the_primary_display():
+    """Not on the virtual desktop: a second screen to the left moves that."""
+    from vigil.config import Config
+    from vigil.desktop import native
+    from vigil.desktop.app import BAR_WIDTH, Api
+
+    settings = Config()
+    settings.api_key = "not-a-real-key"
+    api = Api(settings)
+
+    left, top, width, _height = native.primary_monitor()
+    expected_x = left + (width - BAR_WIDTH) // 2
+    assert api._centred(BAR_WIDTH)[0] == expected_x
+
+
+def test_the_primary_display_is_the_one_at_the_origin():
+    from vigil.desktop import native
+
+    box = native.primary_monitor()
+    assert len(box) == 4
+    if any(m[0] == 0 and m[1] == 0 for m in native.monitors()):
+        assert box[0] == 0 and box[1] == 0
+
+
+def test_the_window_no_longer_walks_to_its_new_shape():
+    """Fourteen resizes per change made WebView2 re-lay-out fourteen times."""
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parent.parent / "vigil" / "desktop"
+              / "app.py").read_text(encoding="utf-8")
+    assert "_animate_to" not in source
+    assert "def _snap(" in source

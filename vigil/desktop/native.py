@@ -223,6 +223,44 @@ def monitors() -> list:
         return [(0, 0, width, height)]
 
 
+def primary_monitor() -> tuple:
+    """(left, top, width, height) of the screen the bar should centre on.
+
+    On Windows the primary monitor is always the one whose origin is (0, 0);
+    everything else is placed around it, and a screen to the left sits at a
+    negative x. Picking it by that rule rather than by enumeration order is
+    what stops the bar being centred on the wrong display.
+    """
+    found = monitors()
+    for box in found:
+        if box[0] == 0 and box[1] == 0:
+            return box
+    return found[0] if found else (0, 0) + screen_size()
+
+
+def place_window(hwnd, x: int, y: int, width: int, height: int) -> bool:
+    """Move and size a window, in one call, without giving it focus.
+
+    pywebview's own move() silently does nothing for this frameless window -
+    the bar stayed wherever it was first created, so it never centred - and
+    resize() alone cannot fix a wrong position. SetWindowPos does both.
+    """
+    if not IS_WINDOWS or not hwnd:
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int,
+                                        ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                        wintypes.UINT]
+        user32.SetWindowPos.restype = wintypes.BOOL
+        return bool(user32.SetWindowPos(
+            wintypes.HWND(hwnd), None, int(x), int(y), int(width), int(height),
+            0x0010 | 0x0004,        # SWP_NOACTIVATE | SWP_NOZORDER
+        ))
+    except Exception:
+        return False
+
+
 def virtual_screen() -> tuple:
     """(left, top, width, height) covering every display at once."""
     if IS_WINDOWS:

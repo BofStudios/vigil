@@ -51,13 +51,21 @@ TOP_MARGIN = 14
 # flickering when the pointer rests on the boundary.
 REACH_IN = 8
 REACH_OUT = 90
-WATCH_INTERVAL = 0.06
-# how many quiet polls a wrong window size has to survive before it is fixed
-DRIFT_PATIENCE = 8
+# How often the pointer is checked: quickly when it is near enough to matter,
+# slowly the rest of the time. This thread lives as long as the app does.
+WATCH_NEAR = 0.06
+WATCH_IDLE = 0.25
+WATCH_CLOSE = 220          # how near "near enough" is, in pixels
+# the window size is reconciled a couple of times a second, not every poll
+DRIFT_INTERVAL = 0.5
+# how many of those checks a wrong size has to survive before it is corrected
+DRIFT_PATIENCE = 2
 
 # set VIGIL_DEBUG_POINTER=1 to watch the hover logic decide
 _POINTER_DEBUG = bool(os.environ.get("VIGIL_DEBUG_POINTER"))
-BACKGROUND = "#1F1E1D"  # matches --bg in the stylesheet
+BACKGROUND = "#060607"  # must equal --bg in style.css, or the
+                        # mismatch shows as a grey rim around the
+                        # shell's rounded corners
 
 _tab_ids = itertools.count(1)
 
@@ -70,10 +78,6 @@ def _js_literal(payload: dict) -> str:
     """
     text = json.dumps(payload, ensure_ascii=False, default=str)
     return text.replace(chr(0x2028), "\\u2028").replace(chr(0x2029), "\\u2029")
-
-
-def _ease_out(t: float) -> float:
-    return 1 - pow(1 - t, 3)
 
 
 class Api:
@@ -103,7 +107,10 @@ class Api:
         # does not fold away over something half-typed
         self.holding = False
         self.visible = True
-        self.screen_width = native.screen_size()[0]
+        # centred on the primary display, not on the virtual desktop: with a
+        # second screen to the left the two are hundreds of pixels apart
+        self.monitor = native.primary_monitor()
+        self.screen_width = self.monitor[2]
         self._outbox: queue.Queue = queue.Queue()
         self._ready = threading.Event()
         self._resizing = threading.Lock()
@@ -299,56 +306,39 @@ class Api:
         return {"ok": True, "width": width, "height": height}
 
     # --------------------------------------------------------------- window
-    def _animate_to(self, width: int, height: int, duration: float = 0.2) -> None:
-        """Grow or shrink the window. Stepping it reads as motion rather than a jump.
-
-        The window stays centred horizontally while it changes width, otherwise
-        it would appear to slide sideways as it grows.
-        """
-        if self.window is None:
-            return
-        with self._resizing:
-            try:
-                start_w = int(self.window.width)
-                start_h = int(self.window.height)
-            except Exception:
-                start_w, start_h = BAR_WIDTH, BAR_HEIGHT
-            if (start_w, start_h) == (width, height):
-                return
-
-            steps = 14
-            try:
-                for index in range(1, steps + 1):
-                    progress = _ease_out(index / steps)
-                    current_w = round(start_w + (width - start_w) * progress)
-                    current_h = round(start_h + (height - start_h) * progress)
-                    self.window.resize(current_w, current_h)
-                    if current_w != start_w:
-                        self.window.move(
-                            max(0, (self.screen_width - current_w) // 2), TOP_MARGIN
-                        )
-                    time.sleep(duration / steps)
-            except Exception:
-                pass
-            finally:
-                # However that went, the window ends up the size it was asked
-                # for. A resize that threw part-way used to abandon the
-                # animation where it stood, leaving the panel squeezed into a
-                # couple of hundred pixels with no way back.
-                self._snap(width, height)
-
     def _snap(self, width: int, height: int) -> None:
         """Put the window at exactly this size, centred. Never raises."""
         if self.window is None:
             return
+        left, top = self._centred(width)
+
+        # SetWindowPos first: it sets position and size together, and unlike
+        # pywebview's move() it actually works on this frameless window.
+        if native.place_window(self.hwnd, left, top, width, height):
+            return
         try:
             self.window.resize(width, height)
-            self.window.move(max(0, (self.screen_width - width) // 2), TOP_MARGIN)
+            self.window.move(left, top)
         except Exception:
             pass
 
+    def _centred(self, width: int) -> tuple:
+        """Top-left corner that centres a window of this width on the display."""
+        screen_left, screen_top, screen_width, _screen_height = self.monitor
+        return screen_left + max(0, (screen_width - width) // 2), screen_top + TOP_MARGIN
+
     def _shape(self, width: int, height: int) -> None:
-        threading.Thread(target=self._animate_to, args=(width, height), daemon=True).start()
+        """Take the window to its new shape, in one step.
+
+        This used to walk there over fourteen resizes on a worker thread. Every
+        one of them made WebView2 re-lay-out the whole page, so the "animation"
+        was a stutter rather than a movement - and while it ran, any other
+        shape change queued up behind it. One SetWindowPos is instant, and the
+        growing and fading the eye actually reads is done in CSS, inside the
+        window, where it costs nothing.
+        """
+        with self._resizing:
+            self._snap(width, height)
 
     def rest(self) -> dict:
         """Shrink back to the pill - only when there is nothing going on."""
@@ -763,41 +753,55 @@ def _watch_pointer(api: Api) -> None:
     The web layer's own mouseenter never fired reliably for this window, and
     polling the cursor is both dependable and closer to what we want anyway:
     the bar can react to the pointer approaching, not just landing on it.
+
+    The rate is not fixed. Reacting to a pointer that is nowhere near the bar
+    does not need sixteen checks a second, and this thread runs for as long as
+    the app is open - so it idles slowly and only quickens once the pointer is
+    somewhere it might matter.
     """
     drifted_for = 0
+    since_drift_check = 0.0
+    interval = WATCH_IDLE
 
     while True:
-        time.sleep(WATCH_INTERVAL)
+        time.sleep(interval)
         if not api.visible or api.window is None:
+            interval = WATCH_IDLE
             continue
 
-        # Self-healing. If the window is not the size its state calls for -
-        # a resize that failed, a display change, anything - put it right.
-        # Given a moment's grace first, so this never fights an animation.
-        actual = native.window_rect(api.hwnd)
-        if actual is not None and not api._resizing.locked():
-            wanted_w, wanted_h = api.expected_size()
-            width = actual[2] - actual[0]
-            height = actual[3] - actual[1]
-            if abs(width - wanted_w) > 8 or abs(height - wanted_h) > 8:
-                drifted_for += 1
-                if drifted_for >= DRIFT_PATIENCE:
-                    api._snap(wanted_w, wanted_h)
-                    drifted_for = 0
-            else:
-                drifted_for = 0
-
-        if api.expanded:
-            continue
-
-        point = native.cursor_position()
         rect = native.window_rect(api.hwnd)
         if rect is None:
             # the handle went stale - find the window again rather than
             # silently giving up on hover for the rest of the session
             api.hwnd = native.find_window(WINDOW_TITLE)
             rect = native.window_rect(api.hwnd)
-        if point is None or rect is None:
+        if rect is None:
+            continue
+
+        # Self-healing, a couple of times a second rather than sixteen. If the
+        # window is not the size its state calls for - a failed resize, a
+        # display change - put it right, after a moment's grace so this never
+        # fights a shape change that is still in flight.
+        since_drift_check += interval
+        if since_drift_check >= DRIFT_INTERVAL:
+            since_drift_check = 0.0
+            if not api._resizing.locked():
+                wanted_w, wanted_h = api.expected_size()
+                if (abs((rect[2] - rect[0]) - wanted_w) > 8
+                        or abs((rect[3] - rect[1]) - wanted_h) > 8):
+                    drifted_for += 1
+                    if drifted_for >= DRIFT_PATIENCE:
+                        api._snap(wanted_w, wanted_h)
+                        drifted_for = 0
+                else:
+                    drifted_for = 0
+
+        if api.expanded:
+            interval = WATCH_IDLE
+            continue
+
+        point = native.cursor_position()
+        if point is None:
             continue
 
         left, top, right, bottom = rect
@@ -805,6 +809,11 @@ def _watch_pointer(api: Api) -> None:
 
         if _POINTER_DEBUG:
             print("pointer", (x, y), "rect", rect, "resting", api.resting, flush=True)
+
+        # close enough that the next move could matter: watch properly
+        watching = (left - WATCH_CLOSE <= x <= right + WATCH_CLOSE
+                    and top - WATCH_CLOSE <= y <= bottom + WATCH_CLOSE)
+        interval = WATCH_NEAR if watching else WATCH_IDLE
 
         if api.resting:
             near = (left - REACH_IN <= x <= right + REACH_IN
@@ -858,14 +867,14 @@ def run(config: Config = None, debug: bool = False) -> int:
     config = config or Config.load()
     ensure_dirs()
 
-    screen_width, _ = native.screen_size()
+    monitor = native.primary_monitor()
     api = Api(config)
 
-    # Loading the tool registry pulls in Playwright and friends, which takes a
-    # few seconds. Doing it here rather than on the front end's first call means
-    # the bar is usable the moment it appears instead of silently swallowing
-    # whatever gets typed into it first.
-    api.new_tab()
+    # Warming the session imports the whole tool registry - pyautogui, mss and
+    # friends - which is most of a second. Doing it here used to mean nothing
+    # at all was on screen until it finished. It runs behind the window now;
+    # anything typed before it lands is queued by the front end.
+    threading.Thread(target=api.new_tab, daemon=True).start()
 
     options = {
         "js_api": api,
@@ -875,8 +884,8 @@ def run(config: Config = None, debug: bool = False) -> int:
         # capsule to something much bigger than it is meant to be. It has to be
         # under PILL_WIDTH x PILL_HEIGHT or the pill can never reach its size.
         "min_size": (PILL_WIDTH - 12, PILL_HEIGHT - 6),
-        "x": max(0, (screen_width - PILL_WIDTH) // 2),
-        "y": TOP_MARGIN,
+        "x": monitor[0] + max(0, (monitor[2] - PILL_WIDTH) // 2),
+        "y": monitor[1] + TOP_MARGIN,
         "frameless": True,
         "easy_drag": False,  # only the grip drags; see .drag-region in the CSS
         "on_top": True,
@@ -905,11 +914,6 @@ def run(config: Config = None, debug: bool = False) -> int:
 
     api.hotkey = native.HotKey(api.toggle_window)
     api.hotkey.start()
-
-    # Build the screen glow now, in the background: the first time Vigil reaches
-    # for the mouse it should light up at once, not half a second later.
-    if config.enable_gui:
-        control_light().prepare()
 
     if config.enable_gui and config.enable_ask_screen:
         api.ask_hotkey = native.HotKey(
