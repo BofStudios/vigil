@@ -860,6 +860,13 @@ def _yield_to_fullscreen(api: Api) -> None:
     while True:
         time.sleep(FULLSCREEN_CHECK)
         try:
+            if not api.hwnd:
+                # the handle is set once the window settles, and can go stale;
+                # without it every call below is a silent no-op
+                api.hwnd = native.find_window(WINDOW_TITLE, visible_only=False)
+                if not api.hwnd:
+                    continue
+
             busy = native.foreground_is_fullscreen(ignore_hwnd=api.hwnd)
 
             if busy and not api.yielded:
