@@ -229,3 +229,86 @@ def test_a_startup_folder_that_will_not_take_it_is_reported(config, monkeypatch)
     monkeypatch.setattr(shortcut, "enable_autostart", refuse)
     api = Api(config)
     assert "error" in api.set_autostart(True)
+
+
+# ------------------------------------------- getting out of a game's way
+def test_nothing_is_fullscreen_off_windows(monkeypatch):
+    from vigil.desktop import native
+
+    monkeypatch.setattr(native, "IS_WINDOWS", False)
+    assert native.foreground_is_fullscreen() is False
+
+
+def test_the_desktop_itself_does_not_count_as_fullscreen():
+    """Progman and WorkerW cover the whole screen and always will."""
+    from vigil.desktop import native
+
+    assert "Progman" in native._SHELL_CLASSES
+    assert "WorkerW" in native._SHELL_CLASSES
+
+
+def test_the_bar_steps_aside_and_comes_back(config, monkeypatch):
+    """A topmost window over a game costs that game most of its frames."""
+    from vigil.desktop import app as app_module
+
+    api = Api(config)
+    api.hwnd = 1234
+    api.visible = True
+
+    hidden = []
+    topmost = []
+    monkeypatch.setattr(app_module.native, "set_visible",
+                        lambda hwnd, shown: hidden.append(shown) or True)
+    monkeypatch.setattr(app_module.native, "set_topmost",
+                        lambda hwnd, on: topmost.append(on) or True)
+
+    fullscreen = {"now": False}
+    monkeypatch.setattr(app_module.native, "foreground_is_fullscreen",
+                        lambda ignore_hwnd=None: fullscreen["now"])
+    monkeypatch.setattr(app_module, "FULLSCREEN_CHECK", 0.01)
+
+    import threading
+    import time
+
+    threading.Thread(target=app_module._yield_to_fullscreen, args=(api,),
+                     daemon=True).start()
+
+    fullscreen["now"] = True
+    time.sleep(0.15)
+    assert api.yielded is True
+    assert hidden[-1] is False        # out of the way
+    assert topmost[-1] is False       # and no longer forcing composition
+
+    fullscreen["now"] = False
+    time.sleep(0.15)
+    assert api.yielded is False
+    assert hidden[-1] is True         # back again
+    assert topmost[-1] is True
+
+
+def test_a_hidden_bar_is_not_shown_just_because_a_game_closed(config, monkeypatch):
+    """If the person put it away, leaving a game should not bring it back."""
+    from vigil.desktop import app as app_module
+
+    api = Api(config)
+    api.hwnd = 1234
+    api.visible = False               # tucked away in the tray
+    api.yielded = True
+
+    shown = []
+    monkeypatch.setattr(app_module.native, "set_visible",
+                        lambda hwnd, on: shown.append(on) or True)
+    monkeypatch.setattr(app_module.native, "set_topmost", lambda hwnd, on: True)
+    monkeypatch.setattr(app_module.native, "foreground_is_fullscreen",
+                        lambda ignore_hwnd=None: False)
+    monkeypatch.setattr(app_module, "FULLSCREEN_CHECK", 0.01)
+
+    import threading
+    import time
+
+    threading.Thread(target=app_module._yield_to_fullscreen, args=(api,),
+                     daemon=True).start()
+    time.sleep(0.15)
+
+    assert api.yielded is False
+    assert True not in shown          # never un-hidden behind the user's back

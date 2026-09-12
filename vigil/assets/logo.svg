@@ -2,7 +2,6 @@
   <rect width="256" height="256" rx="58" fill="#060607"/>
   <rect x="1" y="1" width="254" height="254" rx="57" fill="none"
         stroke="#ffffff" stroke-opacity=".18" stroke-width="1.5"/>
-  <path d="M73.7 81.4 L128 179.2 L182.3 81.4" fill="none" stroke="#ECECEF"
-        stroke-width="21" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="128" cy="115.7" r="12.3" fill="#ECECEF"/>
+  <path d="M68 76 L124 178 L188 58" fill="none" stroke="#ECECEF"
+        stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

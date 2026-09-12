@@ -341,18 +341,40 @@
     wrap.innerHTML = '<div class="body"></div>';
     tab.streamNode = wrap;
     tab.streamText = "";
+    tab.streamFrame = 0;
     return appendTo(tab, wrap);
   }
 
+  /** Add a piece of a streamed answer, and draw at most once a frame.
+   *
+   *  Every chunk used to re-parse and re-render the whole answer so far. Each
+   *  render is proportional to the length, and there is one per token, so the
+   *  cost of an answer grew with the square of its size - a long reply had the
+   *  machine re-laying-out thousands of times for text that was already on
+   *  screen. Tokens still arrive as fast as they arrive; the page just stops
+   *  redrawing more often than it can be seen.
+   */
   function streamChunk(tab, text) {
     const node = sayNode(tab);
     tab.streamText += text;
-    node.querySelector(".body").innerHTML =
-      renderMarkdown(tab.streamText) + '<span class="caret"></span>';
-    if (tab.atBottom && tab.id === state.active) el.stream.scrollTop = el.stream.scrollHeight;
+    if (tab.streamFrame) return;
+
+    tab.streamFrame = requestAnimationFrame(() => {
+      tab.streamFrame = 0;
+      if (!tab.streamNode) return;
+      tab.streamNode.querySelector(".body").innerHTML =
+        renderMarkdown(tab.streamText) + '<span class="caret"></span>';
+      if (tab.atBottom && tab.id === state.active) {
+        el.stream.scrollTop = el.stream.scrollHeight;
+      }
+    });
   }
 
   function endStream(tab) {
+    if (tab.streamFrame) {
+      cancelAnimationFrame(tab.streamFrame);
+      tab.streamFrame = 0;
+    }
     if (!tab.streamNode) return;
     if (!tab.streamText.trim()) tab.streamNode.remove();
     else tab.streamNode.querySelector(".body").innerHTML = renderMarkdown(tab.streamText);

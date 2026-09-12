@@ -56,6 +56,8 @@ REACH_OUT = 90
 WATCH_NEAR = 0.06
 WATCH_IDLE = 0.25
 WATCH_CLOSE = 220          # how near "near enough" is, in pixels
+# how often to look for a full-screen app the bar should get out of the way of
+FULLSCREEN_CHECK = 0.6
 # the window size is reconciled a couple of times a second, not every poll
 DRIFT_INTERVAL = 0.5
 # how many of those checks a wrong size has to survive before it is corrected
@@ -107,6 +109,11 @@ class Api:
         # does not fold away over something half-typed
         self.holding = False
         self.visible = True
+        # the window is created hidden and shown once it has been sized; this
+        # says whether that has happened yet
+        self.revealed = False
+        # set while a full-screen app is in front and the bar has stepped aside
+        self.yielded = False
         # centred on the primary display, not on the virtual desktop: with a
         # second screen to the left the two are hundreds of pixels apart
         self.monitor = native.primary_monitor()
@@ -379,6 +386,18 @@ class Api:
         except Exception:
             pass
         return {"visible": False}
+
+    def reveal(self) -> dict:
+        """Show the window for the first time, once it is the right shape."""
+        if self.revealed:
+            return {"visible": True}
+        self.revealed = True
+        if not native.set_visible(self.hwnd, True):
+            try:
+                self.window.show()
+            except Exception:
+                pass
+        return {"visible": True}
 
     def show_window(self) -> dict:
         self.visible = True
@@ -765,7 +784,7 @@ def _watch_pointer(api: Api) -> None:
 
     while True:
         time.sleep(interval)
-        if not api.visible or api.window is None:
+        if not api.visible or api.window is None or api.yielded:
             interval = WATCH_IDLE
             continue
 
@@ -827,23 +846,63 @@ def _watch_pointer(api: Api) -> None:
                 api.rest()
 
 
-def _polish_window(api: Api) -> None:
-    """Find the window, apply what the platform offers, then size it correctly.
+def _yield_to_fullscreen(api: Api) -> None:
+    """Step aside while a full-screen application is in front.
 
-    The window has to settle before either step: the handle does not exist right
-    away, and a resize issued too early is overwritten by the window's own
-    initial sizing.
+    An always-on-top window overlapping a game forces Windows to drop it out
+    of exclusive full screen, and the game loses most of its frames. Nothing
+    shows up in this app's own CPU or memory when that happens - the cost lands
+    entirely on the thing the person is actually looking at - which is why it
+    has to be handled rather than measured away.
+
+    The bar comes straight back when they leave the game.
+    """
+    while True:
+        time.sleep(FULLSCREEN_CHECK)
+        try:
+            busy = native.foreground_is_fullscreen(ignore_hwnd=api.hwnd)
+
+            if busy and not api.yielded:
+                api.yielded = True
+                native.set_topmost(api.hwnd, False)
+                if api.visible:
+                    native.set_visible(api.hwnd, False)
+            elif not busy and api.yielded:
+                api.yielded = False
+                native.set_topmost(api.hwnd, True)
+                if api.visible:
+                    native.set_visible(api.hwnd, True)
+        except Exception:
+            pass
+
+
+def _polish_window(api: Api) -> None:
+    """Find the window, dress it, size it, and only then let it be seen.
+
+    The size passed to create_window is not honoured for a frameless window, so
+    the window is born at whatever the toolkit felt like - the wrong size, in
+    the wrong place. It used to appear like that for half a second before the
+    first fit() corrected it, which is a flinch right at the moment someone is
+    looking. It starts hidden instead and is shown once it is right.
     """
     for _ in range(60):
         hwnd = native.find_window(WINDOW_TITLE)
         if hwnd:
             api.hwnd = hwnd
+            # out of sight first, before anything else: the window is already
+            # on screen at the toolkit's own size by the time we can see it
+            native.set_visible(hwnd, False)
             native.apply_glass(hwnd, backdrop=native.BACKDROP_ACRYLIC, rounded=True)
             native.set_topmost(hwnd, True)
-            time.sleep(0.35)
+            time.sleep(0.2)
             api.fit()
+            api.reveal()
             return
-        time.sleep(0.05)
+        time.sleep(0.03)
+
+    # The handle never turned up. Rather than leave an invisible app running,
+    # show it anyway and let it be wrong-looking but usable.
+    api.reveal()
 
 
 def run(config: Config = None, debug: bool = False) -> int:
@@ -881,9 +940,12 @@ def run(config: Config = None, debug: bool = False) -> int:
         "width": PILL_WIDTH,
         "height": PILL_HEIGHT,
         # The default minimum is (200, 100), which silently clamps the resting
-        # capsule to something much bigger than it is meant to be. It has to be
-        # under PILL_WIDTH x PILL_HEIGHT or the pill can never reach its size.
-        "min_size": (PILL_WIDTH - 12, PILL_HEIGHT - 6),
+        # capsule to something much bigger than it is meant to be. Set to the
+        # pill exactly: the width and height above are not honoured for a
+        # frameless window, so the minimum is what the window is actually born
+        # at - and being born the right size is what stops a wrong-sized frame
+        # flashing up before the first fit() lands.
+        "min_size": (PILL_WIDTH, PILL_HEIGHT),
         "x": monitor[0] + max(0, (monitor[2] - PILL_WIDTH) // 2),
         "y": monitor[1] + TOP_MARGIN,
         "frameless": True,
@@ -938,6 +1000,7 @@ def run(config: Config = None, debug: bool = False) -> int:
 
     threading.Thread(target=_polish_window, args=(api,), daemon=True).start()
     threading.Thread(target=_watch_pointer, args=(api,), daemon=True).start()
+    threading.Thread(target=_yield_to_fullscreen, args=(api,), daemon=True).start()
 
     webview.start(debug=debug, icon=str(ICON) if ICON.exists() else None)
 

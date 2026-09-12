@@ -223,6 +223,62 @@ def monitors() -> list:
         return [(0, 0, width, height)]
 
 
+#: window classes that are the desktop itself, not an application
+_SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Windows.UI.Core.CoreWindow"}
+
+
+def foreground_is_fullscreen(ignore_hwnd=None) -> bool:
+    """Is a full-screen application in front right now?
+
+    This matters more than it looks. A window marked always-on-top that
+    overlaps a game running full screen forces Windows to drop that game out
+    of exclusive full screen and composite it instead, and the game loses most
+    of its frames - the desktop stays smooth while the thing the person is
+    actually looking at falls apart. An overlay has to get out of the way.
+    """
+    if not IS_WINDOWS:
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        front = user32.GetForegroundWindow()
+        if not front or (ignore_hwnd and int(front) == int(ignore_hwnd)):
+            return False
+
+        name = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(wintypes.HWND(front), name, 256)
+        if name.value in _SHELL_CLASSES:
+            return False
+
+        box = wintypes.RECT()
+        if not user32.GetWindowRect(wintypes.HWND(front), ctypes.byref(box)):
+            return False
+
+        # MONITOR_DEFAULTTONEAREST, and the monitor's full bounds rather than
+        # its work area: a maximised window fills the work area, and that is
+        # not the same thing as full screen.
+        user32.MonitorFromWindow.restype = wintypes.HMONITOR
+        screen = user32.MonitorFromWindow(wintypes.HWND(front), 2)
+        if not screen:
+            return False
+
+        class _MonitorInfo(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                        ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+        info = _MonitorInfo()
+        info.cbSize = ctypes.sizeof(_MonitorInfo)
+        if not user32.GetMonitorInfoW(screen, ctypes.byref(info)):
+            return False
+
+        edge = info.rcMonitor
+        slack = 2       # a pixel either way is still full screen
+        return (box.left <= edge.left + slack and box.top <= edge.top + slack
+                and box.right >= edge.right - slack
+                and box.bottom >= edge.bottom - slack)
+    except Exception:
+        return False
+
+
 def primary_monitor() -> tuple:
     """(left, top, width, height) of the screen the bar should centre on.
 
@@ -257,6 +313,25 @@ def place_window(hwnd, x: int, y: int, width: int, height: int) -> bool:
             wintypes.HWND(hwnd), None, int(x), int(y), int(width), int(height),
             0x0010 | 0x0004,        # SWP_NOACTIVATE | SWP_NOZORDER
         ))
+    except Exception:
+        return False
+
+
+def set_visible(hwnd, shown: bool) -> bool:
+    """Show or hide a window without giving it focus.
+
+    pywebview's own `hidden` option is not honoured by the Windows backend, so
+    the window is born visible at whatever size the toolkit chose. Hiding it
+    the moment its handle appears, and showing it once it has been sized, is
+    what stops that wrong-sized frame being seen.
+    """
+    if not IS_WINDOWS or not hwnd:
+        return False
+    try:
+        # SW_SHOWNOACTIVATE (4) rather than SW_SHOW: the bar must never steal
+        # focus from whatever the person is actually doing.
+        ctypes.windll.user32.ShowWindow(wintypes.HWND(hwnd), 4 if shown else 0)
+        return True
     except Exception:
         return False
 
