@@ -1,3 +1,10 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+preview/
+
 __pycache__/
 *.py[cod]
 *.egg-info/

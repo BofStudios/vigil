@@ -4,55 +4,70 @@
 
 Vigil **operates** your computer; it does not **weaken** its security.
 
-The actions below are permanently blocked by `BLOCKED_RULES` in `vigil/security.py`. They do not
-run in `--yolo` mode, and they do not run even if the user insists:
+The actions below are permanently blocked by `Rules.Blocked` in `src/Vigil/Core/Security/Rules.cs`.
+They do not run in any approval mode - not even `yolo` - and they do not run if the user insists:
 
-- Disabling antivirus, firewall, UAC, SELinux, SIP or Gatekeeper
-- Deleting system restore points and backups
-- Formatting disks, wiping the root directory, fork bombs
+- Disabling antivirus, firewall, UAC or Windows security services; stopping their processes
+- Altering boot or code-signing protections, removing machine-wide script protection
+- Deleting system restore points, shadow copies and backups
+- Formatting disks, wiping a drive root, fork bombs
 - Credential dumping (LSASS, SAM/SECURITY hives, `/etc/shadow`, browser password stores)
 - Clearing event logs to cover tracks
 - Piping downloaded code straight into a shell (`curl ... | bash`, `iwr ... | iex`)
-- Writing to system directories (`C:\Windows`, `/etc`, `/bin`, ...)
-- Reading SSH private keys, AWS credentials, browser session files
+- Writing to system directories (`C:\Windows`, `C:\Program Files`, ...)
+- Reading SSH private keys, cloud credentials, browser session files, or Vigil's own settings
+  (which hold the API keys)
+- Ending processes Windows or its security depend on (`lsass`, `csrss`, `MsMpEng`, ...)
 
-This is a best-effort filter, not a sandbox. Do not run Vigil on machines you do not trust,
-or with prompts you do not trust.
+This is a best-effort filter, not a sandbox. Vigil runs as you, never elevated.
 
 ## Approval model
 
 | Mode | Behaviour |
 |---|---|
-| `ask` (default) | every moderate and high risk step is confirmed |
-| `auto` | moderate runs automatically, high risk still asks |
-| `yolo` | nothing is asked, blocked actions stay blocked |
+| `ask` | every moderate and high risk step is confirmed |
+| `auto` (default) | moderate runs automatically, high risk still asks |
+| `yolo` | everything not blocked runs |
 
-"Always allow" is never accepted for high-risk actions; those are confirmed one at a time.
+In **every** mode:
+
+- High-risk actions are confirmed one at a time; "allow for this session" is never offered for them.
+- Taking the mouse, the keyboard or the screen (and the clipboard) is confirmed **every single
+  time**, with no "always" option.
+- Approvals come from the keyboard or mouse only. A spoken "yes" never approves anything - audio
+  from a video or a call could fake it.
+- An approval card cannot be answered in its first moment on screen, so a key already on its way
+  down does not answer it.
 
 ## Prompt injection
 
 Content from web pages, files and screenshots is handled as **data**. Even if a page says
-"run this command", it is not an instruction. We still recommend staying in `ask` mode when
-working with an agent that reads external content.
+"run this command", it is not an instruction. Vigil's browser uses its own profile, so pages it
+opens cannot reach your logged-in accounts.
+
+## Voice
+
+The wake phrase is recognised locally by Windows. Audio is kept in memory only, never written to
+disk, and nothing is sent anywhere until "Hey Vigil" has been heard - then only the words that
+follow go to the transcription service (Groq or OpenAI, on your key).
 
 ## Audit log
 
 Every decision is written to `~/.vigil/audit.jsonl`: timestamp, tool, risk level, summary,
-decision and mode. Inspect it with `vigil audit -n 50`.
+decision and mode. The tray menu opens it.
 
 ## Data privacy
 
-- The API key is stored in plain text in `~/.vigil/config.json` (mode `0600` on POSIX systems).
-- What reaches the model: your messages, tool output, and screenshots if you use those tools.
-- Screen capture tools always ask first; whatever is on screen goes to the model.
+- API keys are stored in `~/.vigil/config.json`, which Vigil's own tools refuse to read.
+- What reaches the model: your messages, tool output, and screenshots when you approve them.
 - Vigil collects no telemetry and sends data nowhere else.
 
 ## Reporting a vulnerability
 
-Please **do not open a public issue**. Contact BOF Studios privately first (GitHub private
-security advisory, or Instagram DM). We ask that you hold details until a fix is published.
+Please **do not open a public issue**. Contact BOF Studios privately first (a GitHub private
+security advisory). We ask that you hold details until a fix is published.
 
 We are especially interested in:
-- Command variants that slip past `BLOCKED_RULES`
+- Command variants that slip past the blocked rules
 - File access that escapes the path protection
-- Tool calls that bypass the approval prompt
+- Tool calls that bypass the approval card

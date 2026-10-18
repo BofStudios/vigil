@@ -1,7 +1,8 @@
 ; Inno Setup script for the Vigil installer.
 ;
 ; Built in CI, where the Inno compiler is already present:
-;     iscc /DAppVersion=0.7.0 packaging\vigil.iss
+;     dotnet publish src/Vigil/Vigil.csproj -c Release -o dist/Vigil
+;     iscc /DAppVersion=2.0.0 packaging\vigil.iss
 ;
 ; It installs per-user by default - into %LOCALAPPDATA%\Programs\Vigil - so
 ; there is no elevation prompt on a machine someone has just bought this for.
@@ -33,7 +34,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\dist
 OutputBaseFilename=Vigil-{#AppVersion}-windows-setup
-SetupIconFile=..\vigil\assets\vigil.ico
+SetupIconFile=..\src\Vigil\Assets\vigil.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 Compression=lzma2/max
@@ -58,7 +59,7 @@ Source: "..\dist\Vigil\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
-Name: "{userstartup}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: startup
+Name: "{userstartup}\{#AppName}"; Filename: "{app}\{#AppExe}"; Parameters: "--background"; Tasks: startup
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Open Vigil"; Flags: nowait postinstall skipifsilent

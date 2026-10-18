@@ -7,61 +7,30 @@ on:
 
 jobs:
   test:
-    name: test (${{ matrix.os }}, py${{ matrix.python }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ["3.9", "3.11", "3.12"]
+    name: build and test
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-dotnet@v4
         with:
-          python-version: ${{ matrix.python }}
+          dotnet-version: "8.0.x"
 
-      - name: install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: lint
-        run: ruff check .
+      - name: build
+        run: dotnet build Vigil.sln -c Release
 
       - name: tests
-        run: pytest -q
+        run: dotnet test Vigil.sln -c Release --no-build
 
-      - name: cli smoke test
+      - name: the window draws every state
+        shell: pwsh
         run: |
-          python -m vigil --version
-          python -m vigil tools
-          python -m vigil doctor
+          Start-Process src\Vigil\bin\Release\net8.0-windows10.0.19041.0\win-x64\Vigil.exe -ArgumentList "--preview", "$PWD\preview" -Wait
+          $count = (Get-ChildItem preview -Filter *.png).Count
+          if ($count -lt 7) { throw "only $count states were drawn" }
 
-      # The wheel had been unbuildable for a release without anyone noticing,
-      # because nothing here ever built one.
-      - name: build the wheel
-        run: |
-          python -m pip install build
-          python -m build --wheel --outdir dist
-
-      - name: the wheel carries the front end and the icons
-        shell: python
-        run: |
-          import glob, sys, zipfile
-
-          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
-          missing = [
-              wanted for wanted in (
-                  "vigil/assets/vigil.ico",
-                  "vigil/assets/vigil.png",
-                  "vigil/desktop/web/index.html",
-                  "vigil/desktop/web/app.js",
-                  "vigil/desktop/web/style.css",
-              )
-              if wanted not in names
-          ]
-          if missing:
-              sys.exit("missing from the wheel: " + ", ".join(missing))
-          print(len(names), "files, no duplicates" if len(names) == len(set(names)) else "DUPLICATES")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview
+          path: preview

@@ -1,0 +1,381 @@
+﻿<Window x:Class="Vigil.UI.ShellWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Vigil"
+        Width="780" Height="740"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" ShowActivated="False"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        FontFamily="{StaticResource Sans}" Foreground="{StaticResource TextBrush}">
+
+    <Grid x:Name="Root">
+        <!-- Light and shadow live in layers of their own, behind the glass. Kept off
+             the glass itself so the text on it can still be drawn with ClearType. -->
+        <Border x:Name="Aura" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Opacity="0"
+                Width="{Binding ActualWidth, ElementName=Shell}" Height="{Binding ActualHeight, ElementName=Shell}"
+                CornerRadius="{Binding CornerRadius, ElementName=Shell}" Background="{StaticResource Aura}" IsHitTestVisible="False">
+            <Border.Effect>
+                <BlurEffect Radius="34" RenderingBias="Performance" />
+            </Border.Effect>
+        </Border>
+        <Border x:Name="ShadowFar" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0" Opacity="0.62"
+                Width="{Binding ActualWidth, ElementName=Shell}" Height="{Binding ActualHeight, ElementName=Shell}"
+                CornerRadius="{Binding CornerRadius, ElementName=Shell}" Background="Black" IsHitTestVisible="False">
+            <Border.Effect>
+                <BlurEffect Radius="44" RenderingBias="Performance" />
+            </Border.Effect>
+        </Border>
+        <Border x:Name="ShadowNear" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,22,0,0" Opacity="0.5"
+                Width="{Binding ActualWidth, ElementName=Shell}" Height="{Binding ActualHeight, ElementName=Shell}"
+                CornerRadius="{Binding CornerRadius, ElementName=Shell}" Background="Black" IsHitTestVisible="False">
+            <Border.Effect>
+                <BlurEffect Radius="12" RenderingBias="Performance" />
+            </Border.Effect>
+        </Border>
+
+        <!-- the shell -->
+        <Border x:Name="Shell" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0"
+                Width="108" Height="38" Background="{StaticResource Glass}" CornerRadius="19"
+                BorderBrush="{StaticResource Rim}" BorderThickness="1">
+
+            <Grid x:Name="Inner" RenderOptions.ClearTypeHint="Enabled">
+
+                <!-- pill -->
+                <Grid x:Name="PillFace" Background="Transparent" Cursor="Hand">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Width="22" Height="22" VerticalAlignment="Center">
+                            <Ellipse x:Name="PillRing" StrokeThickness="1.2" Stroke="{StaticResource CoreRing}" RenderTransformOrigin="0.5,0.5" Opacity="0.85">
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform x:Name="PillSpin" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Viewbox Width="10" Height="10">
+                                <Canvas Width="256" Height="256">
+                                    <Path Data="{StaticResource MarkGeometry}" Stroke="{StaticResource Accent}" StrokeThickness="26"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </Grid>
+                        <TextBlock x:Name="PillText" Text="Vigil" Margin="8,0,2,1" FontSize="13" FontWeight="SemiBold"
+                                   FontFamily="{StaticResource Display}" VerticalAlignment="Center" />
+                        <Ellipse x:Name="PillDot" Width="5" Height="5" Margin="6,1,0,0" Fill="{StaticResource Core}"
+                                 VerticalAlignment="Center" Visibility="Collapsed" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- body -->
+                <Grid x:Name="Body" Opacity="0" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="66" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- bar -->
+                    <Grid x:Name="Bar" Margin="15,0,12,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- the core: the mark inside a ring that turns, brightens and breathes with Vigil -->
+                        <Grid x:Name="Grip" Width="38" Height="38" Background="Transparent" Cursor="Hand"
+                              ToolTip="Click to talk  ·  drag to move">
+                            <Ellipse x:Name="CoreBloom" Width="38" Height="38" Fill="{StaticResource CoreBloom}" Opacity="0"
+                                     RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform>
+                                    <ScaleTransform x:Name="BloomScale" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Ellipse x:Name="CoreTrack" Width="30" Height="30" Stroke="#1FFFFFFF" StrokeThickness="1" />
+                            <Ellipse x:Name="CoreRingA" Width="30" Height="30" Stroke="{StaticResource CoreRing}" StrokeThickness="1.5"
+                                     RenderTransformOrigin="0.5,0.5" Opacity="0.75">
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform x:Name="CoreSpinA" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Ellipse x:Name="CoreRingB" Width="23" Height="23" Stroke="{StaticResource CoreRing}" StrokeThickness="1"
+                                     StrokeDashArray="1.5 3" RenderTransformOrigin="0.5,0.5" Opacity="0.45">
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform x:Name="CoreSpinB" Angle="140" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Viewbox Width="13" Height="13">
+                                <Canvas Width="256" Height="256">
+                                    <Path x:Name="Mark" Data="{StaticResource MarkGeometry}" Stroke="{StaticResource Accent}" StrokeThickness="24"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                    <Path x:Name="Trace" Data="{StaticResource MarkGeometry}" Stroke="{StaticResource Core}" StrokeThickness="24"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeDashCap="Round" StrokeLineJoin="Round"
+                                          StrokeDashArray="1.5 9.0" Opacity="0" />
+                                </Canvas>
+                            </Viewbox>
+                            <Ellipse x:Name="PulseRing" Width="34" Height="34" Stroke="{StaticResource Core}" StrokeThickness="1" Opacity="0"
+                                     RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False">
+                                <Ellipse.RenderTransform>
+                                    <ScaleTransform x:Name="PulseScale" ScaleX="0.8" ScaleY="0.8" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </Grid>
+
+                        <Grid Grid.Column="1" Margin="12,0,10,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="Placeholder" FontSize="15.5" Foreground="{StaticResource TextFaint}"
+                                       VerticalAlignment="Center" IsHitTestVisible="False" Margin="2,0,0,1" TextTrimming="CharacterEllipsis">
+                                <Run x:Name="PlaceholderText" Text="Ask Vigil anything…" /><Run x:Name="PlaceholderHint" Text="   or say “Hey Vigil”  ·  Ctrl+&lt;" Foreground="#4A4D55" FontSize="13" />
+                            </TextBlock>
+                            <TextBox x:Name="Input" Style="{StaticResource Field}" VerticalAlignment="Center" TextWrapping="Wrap"
+                                     AcceptsReturn="False" MaxHeight="96" MaxLength="20000" />
+                            <StackPanel x:Name="VoiceFace" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed"
+                                        Background="Transparent" IsHitTestVisible="False">
+                                <Grid x:Name="Levels" Width="40" Height="26" VerticalAlignment="Center" />
+                                <TextBlock x:Name="VoiceText" Text="Listening" FontSize="15.5" Margin="10,0,0,1" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextDim}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="MicButton" Style="{StaticResource Round}" ToolTip="Talk  ·  or just say “Hey Vigil”">
+                                <TextBlock x:Name="MicGlyph" Style="{StaticResource Glyph}" Text="&#xE720;" FontSize="16" />
+                            </Button>
+                            <Grid Margin="4,0,4,0">
+                                <Button x:Name="SendButton" Style="{StaticResource Send}" ToolTip="Send  (Enter)">
+                                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE74A;" FontSize="15" FontWeight="Bold" />
+                                </Button>
+                                <Button x:Name="StopButton" Style="{StaticResource Send}" ToolTip="Stop  (Esc)" Visibility="Collapsed">
+                                    <Rectangle Width="10" Height="10" RadiusX="2.5" RadiusY="2.5" Fill="{StaticResource AccentInk}" />
+                                </Button>
+                            </Grid>
+                            <Button x:Name="HideButton" Style="{StaticResource Round}" Width="30" Height="30" Tag="15" ToolTip="Hide  (Esc)">
+                                <TextBlock Style="{StaticResource Glyph}" Text="&#xE8BB;" FontSize="10" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- the voice line: Gemini's glow, where the bar meets the panel -->
+                    <Grid x:Name="VoiceLine" VerticalAlignment="Bottom" Height="10" Margin="60,0,60,-4" Opacity="0" IsHitTestVisible="False">
+                        <Border Height="2.5" CornerRadius="1.25" Background="{StaticResource Aura}" VerticalAlignment="Center">
+                            <Border.Effect>
+                                <BlurEffect Radius="7" />
+                            </Border.Effect>
+                        </Border>
+                        <Border Height="1.2" CornerRadius="0.6" Background="{StaticResource Aura}" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <!-- panel -->
+                    <Grid x:Name="Panel" Grid.Row="1" Opacity="0" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Border Height="1" Background="{StaticResource Divider}" VerticalAlignment="Top" />
+
+                        <!-- the plan, when there is one -->
+                        <Border x:Name="PlanStrip" Grid.Row="0" Visibility="Collapsed" Margin="20,14,20,2" Padding="15,11,15,12"
+                                Background="{StaticResource Surface}" CornerRadius="14" BorderBrush="{StaticResource CardRim}" BorderThickness="1">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE9D5;" FontSize="13" Foreground="{StaticResource Core}" Margin="0,0,8,0" />
+                                    <TextBlock Grid.Column="1" x:Name="PlanCount" Text="0/0" FontSize="12" Margin="0,0,12,0" Foreground="{StaticResource TextDim}"
+                                               VerticalAlignment="Center" FontWeight="SemiBold" />
+                                    <Grid Grid.Column="2" Height="3" VerticalAlignment="Center">
+                                        <Border Background="#14FFFFFF" CornerRadius="1.5" />
+                                        <Border x:Name="PlanBar" Background="{StaticResource CoreSweep}" CornerRadius="1.5" />
+                                    </Grid>
+                                </Grid>
+                                <StackPanel x:Name="PlanList" Margin="0,9,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- the conversation -->
+                        <ScrollViewer x:Name="Scroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Focusable="False" PanningMode="VerticalOnly">
+                            <StackPanel x:Name="Thread" Margin="28,18,24,10" />
+                        </ScrollViewer>
+
+                        <!-- first run: something to think with -->
+                        <ScrollViewer x:Name="SetupView" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Focusable="False">
+                            <StackPanel Width="440" Margin="0,30,0,24" HorizontalAlignment="Center">
+                                <Grid Width="64" Height="64" HorizontalAlignment="Center">
+                                    <Ellipse Fill="{StaticResource CoreBloom}" Opacity="0.55" />
+                                    <Ellipse Width="54" Height="54" Stroke="{StaticResource CoreRing}" StrokeThickness="1.6" />
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="256" Height="256">
+                                            <Path Data="{StaticResource MarkGeometry}" Stroke="{StaticResource Accent}" StrokeThickness="22"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </Grid>
+                                <TextBlock Text="Give Vigil something to think with" FontFamily="{StaticResource Display}" FontSize="22" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" Margin="0,16,0,4" />
+                                <TextBlock Text="Paste a key, or start on the free one." Foreground="{StaticResource TextDim}" HorizontalAlignment="Center" FontSize="13" />
+                                <Border Margin="0,20,0,0" Padding="4" CornerRadius="13" Background="{StaticResource Sunken}" BorderBrush="{StaticResource Edge}"
+                                        BorderThickness="1" HorizontalAlignment="Center">
+                                    <StackPanel x:Name="SetupTabs" Orientation="Horizontal" />
+                                </Border>
+                                <TextBlock x:Name="SetupBlurb" TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource TextDim}"
+                                           FontSize="13" LineHeight="20" Margin="0,16,0,0" />
+                                <StackPanel x:Name="SetupModels" Margin="0,12,0,0" />
+                                <Button x:Name="SetupLink" Style="{StaticResource Bare}" HorizontalAlignment="Center" Margin="0,10,0,0" Padding="10,4"
+                                        Foreground="{StaticResource Core}" FontSize="13" />
+                                <Grid Margin="0,12,0,0">
+                                    <PasswordBox x:Name="SetupKey" Style="{StaticResource SecretBox}" />
+                                    <TextBox x:Name="SetupHost" Style="{StaticResource Box}" Visibility="Collapsed" FontFamily="{StaticResource Mono}" />
+                                </Grid>
+                                <Button x:Name="SetupGo" Style="{StaticResource Primary}" Content="Connect" HorizontalAlignment="Stretch" Margin="0,10,0,0" />
+                                <TextBlock x:Name="SetupError" Foreground="{StaticResource High}" TextWrapping="Wrap" TextAlignment="Center"
+                                           FontSize="12.5" Margin="0,10,0,0" Visibility="Collapsed" />
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <!-- a question from Vigil -->
+                        <Border x:Name="AskCard" Grid.Row="1" VerticalAlignment="Bottom" Margin="20,0,20,12"
+                                Background="{StaticResource Surface}" CornerRadius="16" BorderBrush="{StaticResource CardRim}" BorderThickness="1"
+                                Visibility="Collapsed">
+                            <Grid>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,14" CornerRadius="1.5" Background="{StaticResource CoreSweep}" />
+                                <StackPanel Margin="18,14,18,14">
+                                    <TextBlock Text="VIGIL ASKS" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource Core}" />
+                                    <TextBlock x:Name="AskText" TextWrapping="Wrap" FontSize="14.5" Margin="0,5,0,0" LineHeight="21" />
+                                    <WrapPanel x:Name="AskChoices" Margin="0,10,0,0" />
+                                    <TextBlock Text="Type in the bar, pick one, or just say it." FontSize="11.5" Foreground="{StaticResource TextFaint}" Margin="0,8,0,0" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- the footer -->
+                        <Grid x:Name="Footer" Grid.Row="2" Height="48" Margin="14,0,12,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.ColumnSpan="3" Height="1" Background="{StaticResource Divider}" VerticalAlignment="Top" Margin="-14,0,-12,0" />
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="BrainChip" Style="{StaticResource Chip}" ToolTip="How Vigil thinks">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE945;" FontSize="12" Margin="0,0,6,0" />
+                                        <TextBlock x:Name="BrainText" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="ModelChip" Style="{StaticResource Chip}" ToolTip="The model">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE950;" FontSize="12" Margin="0,0,6,0" />
+                                        <TextBlock x:Name="ModelText" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="FolderChip" Style="{StaticResource Chip}" ToolTip="Working folder">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE8B7;" FontSize="12" Margin="0,0,6,0" />
+                                        <TextBlock x:Name="FolderText" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="TokenText" FontSize="11.5" Foreground="{StaticResource TextFaint}"
+                                           VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <Button x:Name="ModeDot" Style="{StaticResource Chip}" ToolTip="Approval mode">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="ModeFill" Width="7" Height="7" Fill="{StaticResource Moderate}" Margin="0,1,7,0" VerticalAlignment="Center" />
+                                        <TextBlock x:Name="ModeText" Text="Auto" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="VoiceChip" Style="{StaticResource Chip}" ToolTip="Listen for “Hey Vigil”">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="VoiceGlyph" Style="{StaticResource Glyph}" Text="&#xE720;" FontSize="12" Margin="0,0,6,0" />
+                                        <TextBlock x:Name="VoiceChipText" Text="Voice" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="NewChip" Style="{StaticResource Chip}" Margin="0" ToolTip="New conversation  (Ctrl+N)">
+                                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE710;" FontSize="12" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- approval: asked every time for anything that takes the mouse, keyboard or screen -->
+                        <Grid x:Name="Scrim" Grid.RowSpan="3" Background="#D90B0B0E" Visibility="Collapsed" Opacity="0">
+                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="540">
+                                <Border Background="Black" CornerRadius="20" Margin="0,18,0,-18" Opacity="0.6" IsHitTestVisible="False">
+                                    <Border.Effect>
+                                        <BlurEffect Radius="40" />
+                                    </Border.Effect>
+                                </Border>
+                                <Border x:Name="Approval" Padding="24,20,24,20" Background="{StaticResource Glass}" CornerRadius="20"
+                                        BorderBrush="{StaticResource CardRim}" BorderThickness="1" RenderOptions.ClearTypeHint="Enabled">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border x:Name="ApprovalIconBox" Width="40" Height="40" CornerRadius="12" Background="{StaticResource Surface3}"
+                                                    BorderBrush="{StaticResource Edge}" BorderThickness="1">
+                                                <TextBlock x:Name="ApprovalIcon" Style="{StaticResource Glyph}" FontSize="18" Text="&#xE765;" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="Vigil wants to" FontSize="12" Foreground="{StaticResource TextDim}" />
+                                                <TextBlock x:Name="ApprovalTool" FontSize="13" FontWeight="SemiBold" Margin="0,1,0,0" />
+                                            </StackPanel>
+                                            <Border x:Name="RiskPill" Grid.Column="2" CornerRadius="9" Padding="9,3,9,4" BorderThickness="1" VerticalAlignment="Top">
+                                                <TextBlock x:Name="RiskText" FontSize="10.5" FontWeight="SemiBold" />
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock x:Name="ApprovalSummary" FontFamily="{StaticResource Display}" FontSize="17" FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" Margin="0,16,0,0" LineHeight="23" />
+                                        <TextBlock x:Name="ApprovalReason" FontSize="12.5" Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                        <Border x:Name="ApprovalDetailBox" Background="{StaticResource Sunken}" CornerRadius="12" Margin="0,14,0,0" Padding="13,10"
+                                                BorderBrush="{StaticResource Edge}" BorderThickness="1" MaxHeight="170">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                                <TextBlock x:Name="ApprovalDetail" FontFamily="{StaticResource Mono}" FontSize="11.5" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource TextDim}" LineHeight="17" />
+                                            </ScrollViewer>
+                                        </Border>
+                                        <StackPanel x:Name="ApprovalNoteRow" Orientation="Horizontal" Margin="0,12,0,0">
+                                            <TextBlock Style="{StaticResource Glyph}" Text="&#xEA18;" FontSize="12" Foreground="{StaticResource TextFaint}" VerticalAlignment="Top" Margin="0,2,7,0" />
+                                            <TextBlock x:Name="ApprovalNote" FontSize="11.5" Foreground="{StaticResource TextFaint}" TextWrapping="Wrap" MaxWidth="460" />
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                                            <Button x:Name="AllowButton" Style="{StaticResource Primary}" Padding="16,9">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border CornerRadius="5" Background="#1A000000" Padding="6,1,6,2" Margin="0,0,9,0">
+                                                        <TextBlock Text="Y" FontSize="11" FontWeight="SemiBold" />
+                                                    </Border>
+                                                    <TextBlock Text="Allow" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button x:Name="DenyButton" Style="{StaticResource Key}" Padding="16,9">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border CornerRadius="5" Background="#14FFFFFF" Padding="6,1,6,2" Margin="0,0,9,0">
+                                                        <TextBlock Text="N" FontSize="11" Foreground="{StaticResource TextDim}" />
+                                                    </Border>
+                                                    <TextBlock Text="Deny" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button x:Name="AlwaysButton" Style="{StaticResource Key}" Background="Transparent" BorderBrush="Transparent" Padding="12,9">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border CornerRadius="5" Background="#14FFFFFF" Padding="6,1,6,2" Margin="0,0,9,0">
+                                                        <TextBlock Text="A" FontSize="11" Foreground="{StaticResource TextDim}" />
+                                                    </Border>
+                                                    <TextBlock Text="Allow for this session" Foreground="{StaticResource TextDim}" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- small notices, under the shell -->
+        <StackPanel x:Name="Toasts" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,64,0,0" IsHitTestVisible="False" />
+    </Grid>
+</Window>

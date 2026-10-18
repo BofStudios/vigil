@@ -1,0 +1,57 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- the 19041 SDK projection brings the Windows speech voices (OneCore) -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <!-- only for the tray icon -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- the manifest is the right place for a WPF app's DPI awareness -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+
+    <AssemblyName>Vigil</AssemblyName>
+    <RootNamespace>Vigil</RootNamespace>
+    <ApplicationIcon>Assets\vigil.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <Product>Vigil</Product>
+    <Company>BOF Studios</Company>
+    <Copyright>Copyright (c) 2026 BOF Studios</Copyright>
+    <Version>2.0.0</Version>
+
+    <!-- one file, no runtime to install -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WPF and WinForms both define Application, Color, Point...; keep WinForms out of scope -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="System.Speech" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\vigil.ico" />
+    <Resource Include="Assets\vigil.png" />
+    <None Remove="Assets\*.svg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Vigil.Tests" />
+  </ItemGroup>
+
+</Project>

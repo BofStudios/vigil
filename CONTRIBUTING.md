@@ -1,62 +1,47 @@
 # Contributing
 
-Vigil is a BOF Studios project. Contributions are welcome.
+Vigil is a BOF Studios project.
 
 ## Development setup
+
+You need the .NET 8 SDK on Windows 10 (2004) or later.
 
 ```bash
 git clone https://github.com/BofStudios/vigil.git
 cd vigil
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-source .venv/bin/activate     # macOS / Linux
-pip install -e ".[all,dev]"
+dotnet build Vigil.sln
+dotnet test Vigil.sln
 ```
 
-Before you push:
+Both must be clean before you open a pull request. Live tests against a real model run only
+with `VIGIL_LIVE=1` set, because they spend the key's quota.
+
+To look at a change to the window without disturbing whatever is on screen:
 
 ```bash
-ruff check .
-pytest -q
+src/Vigil/bin/Debug/net8.0-windows10.0.19041.0/win-x64/Vigil.exe --preview out
 ```
-
-Both must be clean before you open a pull request.
 
 ## Code style
 
-- Line length 110, `ruff` rules apply.
-- Code and comments in English.
-- Avoid adding dependencies. If one is unavoidable, put it under
-  `[project.optional-dependencies]` and make the module importable without it
-  (the `AVAILABLE = False` pattern).
-- Every new tool needs at least one test.
+- Code and comments in English. Comments say why, not what.
+- Avoid adding dependencies. The app uses NAudio and System.Speech and nothing else.
+- Every new rule or tool needs a test.
 
 ## Adding a tool
 
-1. Write your module under `vigil/tools/` and publish a `TOOLS` list.
-2. Pick the right `Risk` level:
-   - `SAFE` only for read-only, trivially reversible work
-   - `MODERATE` for anything that changes the system
-   - `HIGH` for irreversible work (deleting, terminating, installing)
-3. Call `ctx.guard.check_action(...)` for destructive work and honour the answer.
-4. Register it with `registry.load_module(".your_module")` in `build_registry`.
-5. Add a test in `tests/test_tools.py` and update the README table.
+1. Write the handler in `src/Vigil/Core/Tools/` and add a `ToolSpec` to that file's `All`.
+2. Pick the right `Risk`:
+   - `Safe` only for read-only, trivially reversible work
+   - `Moderate` for anything that changes the system
+   - `High` for irreversible work (deleting, ending processes, installing)
+3. Call the guard inside the handler (`ctx.Guard.CheckAction`, `CheckPath`, `CheckCommand`) before
+   doing anything - the guard, not the spec, is what actually decides.
+4. Anything that takes the mouse, keyboard or screen goes through `Rules.AlwaysAsk`.
+5. Expose it to the model in `Compact.cs` - add it to a group if one fits; every request carries
+   every schema, so keep the description short.
 
 ## Security rules
 
-Pull requests that **weaken** `BLOCKED_RULES` in `vigil/security.py` will not be accepted.
-Proposals for new blocks — especially bypasses you have found — are the most valuable
-contribution you can make.
-
-If a rule produces a false positive (blocks a harmless command), open an issue with the full
-command and we will narrow the rule.
-
-## Commits and pull requests
-
-- Keep commit messages short and descriptive: `tools: add window focus`
-- Describe what changed and how you tested it.
-- Screenshots or a GIF are a big plus.
-
-## Conduct
-
-Be respectful, be helpful, and never talk down to beginners. That is the whole code.
+Changes to `Rules.cs` need a test in `SecurityTests.cs` showing the command is caught - and that
+an everyday command is not.
