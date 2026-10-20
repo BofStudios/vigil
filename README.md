@@ -55,6 +55,25 @@ next step - *"Shall I write the script and schedule it for 7 am?"*
 
 <img src="docs/speaking.png" alt="Speaking" width="780">
 
+## A second brain
+
+Click the icon by the clock and Vigil opens as an app: **Today**, **Notes**, **Journal** and
+**Settings** in one window.
+
+<img src="docs/home.png" alt="Vigil as an app" width="780">
+
+- **Vigil Mind** - a folder in your Documents where everything Vigil keeps lives as plain files
+  you can open yourself: `Notes` (markdown, written when you ask it to remember something),
+  `Journal` (one file a day: what you asked, what it did, what it refused) and `Activity`.
+- **Awareness** - Vigil notes which app is in front and for how long. App names and minutes only:
+  no window titles, no screen, no keystrokes, and nothing leaves the PC except as context for the
+  question you ask. A dot in the app shows when it is on; one switch turns it off, and "Forget
+  today" deletes the day.
+- **Check-ins** - after a long stretch in one app, or when you come back after a break, it says
+  something short, the way a friend at the next desk would - *"Two hours in VS Code. Want me to
+  write down where you got to?"* Off with one switch, and it never interrupts while it is working
+  or asking you something.
+
 ## What it will never do
 
 Vigil operates your computer; it does not weaken its security. These are blocked in every mode,
@@ -84,6 +103,7 @@ Vigil is the harness, not the model. On the first screen pick one:
 | | |
 |---|---|
 | **Free** | Groq's free tier - `gpt-oss-20b` for everyday jobs, `gpt-oss-120b` for problems. Get a key at console.groq.com/keys |
+| **Gemini** | Google's free key - `gemini-2.5-flash`, or `gemini-2.5-pro`. Get one at aistudio.google.com/apikey |
 | **Claude** | your Anthropic key |
 | **GPT** | your OpenAI key (or anything OpenAI-compatible via `openai_base_url`) |
 | **Offline** | Ollama on this machine - nothing leaves it |
@@ -116,8 +136,8 @@ src/Vigil/
   Core/            agent loop, providers, the security guard, brains, memory, tools
   Voice/           wake phrase, microphone, transcription, speech
   Desktop/         Win32, tray, browser control, screen capture, start-up
-  UI/              the window: pill, bar, panel, approvals
-tests/Vigil.Tests/ security rules, voice text, providers; live tests with VIGIL_LIVE=1
+  UI/              the bar (pill, panel, approvals, check-ins) and the app window
+tests/Vigil.Tests/ security rules, voice text, providers, Vigil Mind; live tests with VIGIL_LIVE=1
 ```
 
 Settings live in `~/.vigil/config.json` (or `VIGIL_HOME`), next to the audit log and memory.
