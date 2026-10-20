@@ -74,15 +74,25 @@ public sealed class CheckIn
                        (name.Length > 0 ? "; their name is " + name : "") + ". You only know app names and times, not what is on screen."),
             Msg.User(prompt),
         };
-        try
+        // a check-in is never urgent: out of quota for the minute, it waits once and tries again
+        for (var attempt = 1; attempt <= 2; attempt++)
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(25));
-            var reply = await provider.ChatAsync(messages, null, null, timeout.Token).ConfigureAwait(false);
-            var text = ThinkFilter.Strip(reply.Content).Trim().Trim('"');
-            if (text.Length is > 0 and < 400) return text;
+            try
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(TimeSpan.FromSeconds(25));
+                var reply = await provider.ChatAsync(messages, null, null, timeout.Token).ConfigureAwait(false);
+                var text = ThinkFilter.Strip(reply.Content).Trim().Trim('"');
+                if (text.Length is > 0 and < 400) return text;
+                break;
+            }
+            catch (RateLimitException limit) when (attempt == 1 && limit.RetryAfter <= TimeSpan.FromSeconds(40))
+            {
+                try { await Task.Delay(limit.RetryAfter + TimeSpan.FromSeconds(1), ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+            }
+            catch (Exception ex) when (ex is ProviderException or OperationCanceledException or HttpRequestException) { break; }
         }
-        catch (Exception ex) when (ex is ProviderException or OperationCanceledException or HttpRequestException) { }
         return Fallback(moment);
     }
 

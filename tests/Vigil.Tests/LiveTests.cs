@@ -9,6 +9,7 @@ namespace Vigil.Tests;
 
 /// <summary>Talks to the real model on the real key. Off unless VIGIL_LIVE=1, because it
 /// spends the person's quota and needs the network.</summary>
+[Collection("mind")]
 public class LiveTests
 {
     sealed class Host : IAgentHost
@@ -87,6 +88,47 @@ public class LiveTests
         Assert.Equal("en", Vigil.Voice.SpeechText.GuessLanguage(answer, "en"));
         Assert.DoesNotMatch("[ğşıİ]", answer);
         Assert.EndsWith("?", answer.TrimEnd());
+    }
+
+    [Fact]
+    public async Task A_check_in_is_written_by_the_model_and_asks_something()
+    {
+        if (!Live) return;
+        var config = Config.Load();
+        var moment = new CheckIn.Moment("streak", "Visual Studio Code", TimeSpan.FromMinutes(95));
+
+        var text = await new CheckIn(config).WriteAsync(ProviderFactory.Build(config), moment, CancellationToken.None);
+
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "vigil-live-checkin.txt"), text);
+        Assert.NotEqual(CheckIn.Fallback(moment), text);
+        Assert.True(text.Length < 300, text);
+        Assert.Contains("?", text);
+    }
+
+    [Fact]
+    public async Task Take_a_note_lands_in_vigil_mind()
+    {
+        if (!Live) return;
+        var root = Path.Combine(Path.GetTempPath(), "vigil-live-mind-" + Guid.NewGuid().ToString("N")[..8]);
+        Mind.UseRoot(root);
+        try
+        {
+            Mind.Ensure();
+            var config = Config.Load();
+            var host = new Host();
+            var agent = new Agent(config, ProviderFactory.Build(config), Registry.Build(config), host);
+
+            await agent.RunAsync("Take a note called Demo: the investor demo is on Friday at 3 pm.");
+
+            Assert.Empty(host.Errors);
+            Assert.Contains("notes", host.Tools);
+            Assert.Contains(Mind.ListNotes(), n => File.ReadAllText(n.Path).Contains("Friday"));
+        }
+        finally
+        {
+            Mind.UseRoot("");
+            try { Directory.Delete(root, true); } catch (IOException) { }
+        }
     }
 
     [Fact]
