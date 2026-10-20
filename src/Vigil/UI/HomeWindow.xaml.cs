@@ -68,10 +68,17 @@ public partial class HomeWindow : Window
         DayToday.Click += (_, _) => { _journalDay = DateTime.Now.Date; DrawJournal(); };
 
         ChangeBrain.Click += (_, _) => _shell.OpenBrainSetup();
-        NameBox.LostFocus += (_, _) => _shell.Change(c => c.UserName = NameBox.Text.Trim());
+        NameBox.LostFocus += (_, _) => SaveName();
+        NameBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) SaveName(); };
+
+        // a maximized chrome-less window hangs its frame off the screen edges; pull the content back in
+        StateChanged += (_, _) => Root.Margin = WindowState == WindowState.Maximized
+            ? SystemParameters.WindowResizeBorderThickness
+            : new Thickness(0);
 
         _refresh.Tick += (_, _) => { if (IsVisible && PageToday.Visibility == Visibility.Visible) DrawToday(); DrawAwareness(); };
         Loaded += (_, _) => { DrawToday(); DrawAwareness(); BuildSettings(); _refresh.Start(); };
+        Closing += (_, _) => SaveName();
         Closed += (_, _) => _refresh.Stop();
     }
 
@@ -189,8 +196,11 @@ public partial class HomeWindow : Window
         }
 
         // recently
-        var lines = Mind.JournalLines(DateTime.Now.Date, 9);
-        if (lines.Count == 0 && Mind.LastDayBefore(DateTime.Now.Date) is { } last) lines = Mind.JournalLines(last, 6);
+        // Vigil starting and closing belong in the journal, not in "recently"
+        static List<string> Worth(List<string> all, int keep) =>
+            all.Where(l => !l.Contains("**started**") && !l.Contains("**closed**")).TakeLast(keep).ToList();
+        var lines = Worth(Mind.JournalLines(DateTime.Now.Date, 80), 9);
+        if (lines.Count == 0 && Mind.LastDayBefore(DateTime.Now.Date) is { } last) lines = Worth(Mind.JournalLines(last, 80), 6);
         RecentList.Children.Clear();
         RecentEmpty.Visibility = lines.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         foreach (var line in Enumerable.Reverse(lines))
@@ -384,6 +394,12 @@ public partial class HomeWindow : Window
     }
 
     // ================================================================== settings
+    void SaveName()
+    {
+        var name = NameBox.Text.Trim();
+        if (name != _shell.Settings.UserName) _shell.Change(c => c.UserName = name);
+    }
+
     void BuildSettings()
     {
         var c = _shell.Settings;

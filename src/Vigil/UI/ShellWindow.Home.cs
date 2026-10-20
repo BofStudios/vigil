@@ -11,7 +11,7 @@ public partial class ShellWindow
     /// <summary>Opens the app window, or brings it forward.</summary>
     public void OpenHome()
     {
-        if (_home is null || !_home.IsLoaded)
+        if (_home is null)
         {
             _home = new HomeWindow(this);
             _home.Closed += (_, _) => _home = null;

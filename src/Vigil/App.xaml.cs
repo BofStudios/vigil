@@ -28,10 +28,11 @@ public partial class App : Application
             return;
         }
 
-        _single = new SingleInstance(() => Dispatcher.BeginInvoke(() => _shell?.Summon()));
+        // opening Vigil again (Start menu, a shortcut) opens it as an app
+        _single = new SingleInstance(() => Dispatcher.BeginInvoke(() => _shell?.OpenHome()));
         if (!_single.First)
         {
-            // already running: bring that one forward and leave
+            // already running: bring that one's window forward and leave
             _single.Summon();
             _single.Dispose();
             Shutdown();
@@ -49,7 +50,11 @@ public partial class App : Application
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log(ex); }
         var background = e.Args.Contains("--background") || config.StartHidden;
         _shell = new ShellWindow(config, background);
-        if (!background) _shell.Show();
+        if (!background)
+        {
+            _shell.Show();
+            if (config.IsReady) _shell.OpenHome();   // otherwise the bar is showing the first-run setup
+        }
         else
         {
             // created, so the hot key and the wake phrase work, but not shown
