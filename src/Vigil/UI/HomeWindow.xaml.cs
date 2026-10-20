@@ -41,6 +41,7 @@ public partial class HomeWindow : Window
         AskBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) Ask(); };
         AskSend.Click += (_, _) => Ask();
         AskMic.Click += (_, _) => _shell.TalkFromHome();
+        TalkMode.Click += (_, _) => { _shell.ToggleTalk(); DrawAwareness(); };
         SaysReply.Click += (_, _) => _shell.ReplyCheckIn(talk: false);
         SaysTalk.Click += (_, _) => _shell.ReplyCheckIn(talk: true);
 
@@ -137,6 +138,7 @@ public partial class HomeWindow : Window
     {
         var on = _shell.Settings.Awareness;
         AwareDot.Fill = on ? B("Safe") : B("TextFaint");
+        TalkModeText.Text = _shell.Talking ? "Talking · tap to end" : "Talk mode";
         AwareText.Text = on ? (Activity.Away ? "Awareness on · you're away" : "Awareness on") : "Awareness off";
     }
 

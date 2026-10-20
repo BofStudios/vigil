@@ -334,6 +334,7 @@ public partial class ShellWindow : Window
         {
             e.Handled = true;
             if (_voice.Speaker.Speaking) { _voice.Speaker.Stop(); return; }
+            if (_talking) { EndTalk(); return; }   // Esc while talking: that's all
             if (_voice.State is VoiceState.Listening) { _voice.ListenNow(); return; }
             if (_askPending) { AnswerAsk(null); return; }
             if (_shape == Shape.Panel) { GoTo(Shape.Bar, focus: true); return; }

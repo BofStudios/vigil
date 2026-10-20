@@ -62,8 +62,22 @@
             <!-- TODAY -->
             <ScrollViewer x:Name="PageToday" VerticalScrollBarVisibility="Auto" Focusable="False">
                 <StackPanel Margin="44,56,44,40" MaxWidth="860">
-                    <TextBlock x:Name="Greeting" FontFamily="{StaticResource Display}" FontSize="34" FontWeight="SemiBold" Text="Good evening." />
-                    <TextBlock x:Name="TodayDate" FontSize="14" Foreground="{StaticResource TextDim}" Margin="0,6,0,0" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="Greeting" FontFamily="{StaticResource Display}" FontSize="34" FontWeight="SemiBold" Text="Good evening." />
+                            <TextBlock x:Name="TodayDate" FontSize="14" Foreground="{StaticResource TextDim}" Margin="0,6,0,0" />
+                        </StackPanel>
+                        <Button x:Name="TalkMode" Grid.Column="1" Style="{StaticResource Key}" Padding="16,9" VerticalAlignment="Top" ToolTip="A hands-free conversation: it listens again after every answer">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Glyph}" Text="&#xE8F2;" FontSize="14" Margin="0,0,8,0" />
+                                <TextBlock x:Name="TalkModeText" Text="Talk mode" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
 
                     <!-- ask -->
                     <Border Margin="0,26,0,0" CornerRadius="18" Background="#17FFFFFF" BorderBrush="#1FFFFFFF" BorderThickness="1" Padding="18,6,8,6">

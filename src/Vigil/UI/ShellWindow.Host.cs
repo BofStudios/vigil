@@ -130,7 +130,10 @@ public partial class ShellWindow : IAgentHost
         AddUser(text, spoken: language is not null);
         GoTo(Shape.Panel);
         // the language Vigil will answer in - English unless it is set to follow the user
-        _voiceTurn = language is not null && _config.SpeakReplies ? (AnswersInEnglish ? "en" : language) : null;
+        // in talk mode everything is answered out loud, even a line that was typed
+        _voiceTurn = (language is not null && _config.SpeakReplies) || _talking
+            ? (AnswersInEnglish || language is null ? "en" : language)
+            : null;
         if (_voiceTurn is not null)
         {
             _voice.Speaker.Begin(_voiceTurn);
@@ -173,6 +176,11 @@ public partial class ShellWindow : IAgentHost
         if (spoken is not null)
         {
             await _voice.Speaker.WhenDoneAsync();
+            if (_talking)
+            {
+                TalkListen();   // the conversation goes on without a word to wake it
+                return;
+            }
             // it closed with a question, so wait a little longer for the answer
             var asked = answer.TrimEnd().EndsWith('?') || answer.TrimEnd().EndsWith('？');
             var window = asked ? Math.Max(_config.FollowUpSeconds, 9) : _config.FollowUpSeconds;

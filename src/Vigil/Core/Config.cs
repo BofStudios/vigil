@@ -74,9 +74,12 @@ public sealed class Config
     public string VoiceLanguage { get; set; } = "";
     /// <summary>Read answers aloud when the question was spoken.</summary>
     public bool SpeakReplies { get; set; } = true;
-    /// <summary>auto picks the most natural voice it can reach for each language;
-    /// windows, groq (natural English on the free key) and cloud (OpenAI, every language) force one.</summary>
+    /// <summary>auto picks the most natural voice it can reach for each language, a neural voice on
+    /// this computer (piper) first; piper, windows, groq (natural English on the free key) and
+    /// cloud (OpenAI, every language) force one.</summary>
     public string TtsEngine { get; set; } = "auto";
+    /// <summary>Part of the file name of a Piper voice in ~/.vigil/voices/piper, e.g. "alan"; empty takes the first one found.</summary>
+    public string PiperVoice { get; set; } = "";
     public string GroqTtsModel { get; set; } = "canopylabs/orpheus-v1-english";
     public string GroqTtsVoice { get; set; } = "daniel";
     /// <summary>A Windows voice by name; empty picks the best one for the language.</summary>

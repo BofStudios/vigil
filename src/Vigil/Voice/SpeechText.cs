@@ -18,6 +18,20 @@ public static class SpeechText
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>"Hey Vigil, open Notepad" -> "open Notepad".</summary>
+    static readonly Regex EndTalkWords = new(
+        @"^\W*(that'?s all|that is all|that will be all|that'?s it|goodbye|good ?bye|bye( bye)?|talk mode off|end (the )?(talk|conversation)|we'?re done|thanks,? (that'?s all|bye)|görüşürüz|hoşça kal|sohbeti bitir|bu kadar)\W*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    static readonly Regex StartTalkWords = new(
+        @"^\W*(let'?s (talk|chat|have a (talk|chat|conversation))|(start )?(talk|conversation) mode|konuşalım|sohbet (modu|edelim))\W*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>"That's all", "goodbye": the whole utterance ends a talk-mode conversation.</summary>
+    public static bool EndsTalk(string heard) => EndTalkWords.IsMatch(heard);
+
+    /// <summary>"Let's talk", "talk mode": the whole utterance starts one.</summary>
+    public static bool StartsTalk(string heard) => StartTalkWords.IsMatch(heard);
+
     public static string StripWake(string heard)
     {
         var text = heard.Trim();

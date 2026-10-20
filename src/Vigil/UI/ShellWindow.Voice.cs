@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using Vigil.Core;
 using Vigil.Voice;
 
 namespace Vigil.UI;
@@ -55,7 +56,13 @@ public partial class ShellWindow
             return;
         }
         if (_shape == Shape.Pill) GoTo(Shape.Bar);
-        _voice.ListenNow();
+        if (_talking)
+        {
+            EndTalk("Alright, I'll be here.");   // the mic button while talking: that's all
+            return;
+        }
+        // it answers the press with a word, then listens
+        _voice.Summon(greet: _config.GreetOnSummon);
     }
 
     void OnWoken()
@@ -73,12 +80,116 @@ public partial class ShellWindow
             AnswerAsk(heard.Text);
             return;
         }
+        if (_talking && SpeechText.EndsTalk(heard.Text))
+        {
+            EndTalk("Of course. I'm here whenever you need me.");
+            return;
+        }
+        if (!_talking && SpeechText.StartsTalk(heard.Text))
+        {
+            StartTalk();
+            return;
+        }
         if (StopWords.IsMatch(heard.Text))
         {
             StopEverything();
             return;
         }
         Submit(heard.Text, heard.Language);
+    }
+
+    // ================================================================ talk mode
+    // A conversation, not a series of commands: it listens, answers out loud, and listens
+    // again - no wake phrase, no button - until you say "that's all", press Esc or the mic.
+    bool _talking;
+    bool _talkListening;
+    int _quietRounds;
+
+    internal bool Talking => _talking;
+
+    internal void ToggleTalk()
+    {
+        if (_talking) EndTalk("Talk mode off.");
+        else StartTalk();
+    }
+
+    internal void StartTalk()
+    {
+        if (_talking) return;
+        if (!_config.EnableVoice)
+        {
+            Toast("Voice is turned off in settings.");
+            return;
+        }
+        if (!_config.IsReady)
+        {
+            Summon();
+            return;
+        }
+        if (!_voice.On && !_voice.Start()) return;
+        _talking = true;
+        _quietRounds = 0;
+        if (Busy) _agent?.Stop();
+        OnWoken();
+        RefreshFooter();
+        ShowVoiceState(_voice.State);
+        Journal("talk mode", "started");
+        _voice.Speaker.Say("Talk mode. I'm listening - just talk, and say that's all when you're done.", "en");
+        _ = Task.Run(async () =>
+        {
+            await _voice.Speaker.WhenDoneAsync().ConfigureAwait(false);
+            await Dispatcher.BeginInvoke(TalkListen);
+        });
+    }
+
+    internal void EndTalk(string? say = null)
+    {
+        if (!_talking) return;
+        _talking = false;
+        _voice.CancelListening();
+        Journal("talk mode", "ended");
+        if (say is not null && _voice.On) _voice.Speaker.Say(say, "en");
+        RefreshFooter();
+        ShowVoiceState(_voice.State);
+    }
+
+    void Journal(string kind, string text)
+    {
+        if (_config.Journal) Mind.Journal(kind, text);
+    }
+
+    /// <summary>Listens for the next thing said, hands it on, and - if it was only a
+    /// stop word - listens again. Once it is answering, the end of that answer calls this.</summary>
+    async void TalkListen()
+    {
+        if (!_talking || _talkListening) return;
+        _talkListening = true;
+        try
+        {
+            while (_talking && !Busy && !_askPending && !_approvalPending)
+            {
+                var began = DateTime.UtcNow;
+                await Task.Delay(250);   // let the end of its own voice die away first
+                if (!_talking || Busy) break;
+                var heard = await _voice.ListenAsync(TimeSpan.FromSeconds(25), null, false, chime: false);
+                if (!_talking) break;
+                if (heard is null)
+                {
+                    // nothing for a while: a few quiet rounds and it lets go, rather than listening all night
+                    if (DateTime.UtcNow - began < TimeSpan.FromSeconds(2)) await Task.Delay(1500);   // no hot loop if the mic is busy
+                    if (++_quietRounds >= 3)
+                    {
+                        EndTalk("It's gone quiet, so I'll stop listening. Just say Hey Vigil when you want me.");
+                        break;
+                    }
+                    continue;
+                }
+                _quietRounds = 0;
+                OnHeard(heard);
+                if (Busy) break;   // it is answering; when it has finished, the answer calls this again
+            }
+        }
+        finally { _talkListening = false; }
     }
 
     async void FollowUp(string language, double seconds)
@@ -209,7 +320,7 @@ public partial class ShellWindow
         Placeholder.Visibility = showing || Input.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
         VoiceText.Text = state switch
         {
-            VoiceState.Listening => "Listening…",
+            VoiceState.Listening => _talking ? "Listening…   ·   talk mode" : "Listening…",
             VoiceState.Hearing => "Understanding…",
             VoiceState.Speaking => "Speaking   ·   Esc to stop",
             _ => "",

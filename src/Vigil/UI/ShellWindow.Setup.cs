@@ -193,8 +193,9 @@ public partial class ShellWindow
             Option("Clap three times to wake", "three even claps open Vigil and it listens", _config.ClapToWake, ToggleClaps),
             Option("Answer in English", "whatever language you speak to it in", AnswersInEnglish, ToggleEnglish),
             Option("Speak answers", "when you asked by voice", _config.SpeakReplies, () => { _config.SpeakReplies = !_config.SpeakReplies; Save(); }),
-            Option("Best voice available", "natural English on Groq, OpenAI for every language, else Windows",
-                   _config.TtsEngine is "auto" or "groq", () => SetVoiceEngine("auto")),
+            Option("Talk mode", "a hands-free conversation: it listens again after every answer", _talking, ToggleTalk),
+            Option("Best voice available", LocalVoiceLine(),
+                   _config.TtsEngine is "auto" or "groq" or "piper", () => SetVoiceEngine("auto")),
             Option("Windows voice only", VoiceName() + " - on this computer", _config.TtsEngine == "windows", () => SetVoiceEngine("windows")),
             Option("OpenAI voice", ProviderFactory.CloudVoice(_config) is null ? "needs an OpenAI key" : "the most natural, every language",
                    _config.TtsEngine == "cloud", () => SetVoiceEngine("cloud"), enabled: ProviderFactory.CloudVoice(_config) is not null),
@@ -216,7 +217,13 @@ public partial class ShellWindow
 
         NewChip.Click += (_, _) => NewConversation();
         HomeChip.Click += (_, _) => OpenHome();
+        TalkChip.Click += (_, _) => ToggleTalk();
     }
+
+    /// <summary>What "best voice" means on this computer right now.</summary>
+    string LocalVoiceLine() => _voice.Speaker.LocalVoiceReady
+        ? _voice.Speaker.LocalVoiceName + " - a neural voice on this computer"
+        : "a neural voice on this PC if installed, else Groq, OpenAI or Windows";
 
     bool AnswersInEnglish => !string.Equals(_config.ReplyLanguage, "auto", StringComparison.OrdinalIgnoreCase);
 
@@ -335,6 +342,8 @@ public partial class ShellWindow
         VoiceChipText.Text = listening ? "Hey Vigil" : "Voice off";
         VoiceGlyph.Text = listening ? "\uE720" : "\uEC54";
         VoiceChip.Foreground = listening ? B("Core") : B("TextDim");
+        TalkChip.Foreground = _talking ? B("Core") : B("TextDim");
+        TalkChipText.Text = _talking ? "Talking" : "Talk";
 
         var tokens = _agent?.Provider.TotalTokens ?? 0;
         TokenText.Text = tokens == 0 ? "" : tokens < 1000 ? tokens + " tok" : (tokens / 1000.0).ToString("0.0", CultureInfo.InvariantCulture) + "k tok";
@@ -384,6 +393,7 @@ public partial class ShellWindow
             menu.Items.Add(Tray.Item("Listen for “Hey Vigil”", () => Dispatcher.BeginInvoke(ToggleWake), _config.WakeWord && _voice.WakeListening));
             menu.Items.Add(Tray.Item("Clap three times to wake", () => Dispatcher.BeginInvoke(ToggleClaps), _config.ClapToWake));
             menu.Items.Add(Tray.Item("Answer in English", () => Dispatcher.BeginInvoke(ToggleEnglish), AnswersInEnglish));
+            menu.Items.Add(Tray.Item("Talk mode", () => Dispatcher.BeginInvoke(ToggleTalk), _talking));
             menu.Items.Add(Tray.Item("Speak answers", () => Dispatcher.BeginInvoke(() => { _config.SpeakReplies = !_config.SpeakReplies; Save(); }), _config.SpeakReplies));
             menu.Items.Add(Tray.Item("Start with Windows", () =>
             {

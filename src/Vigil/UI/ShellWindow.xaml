@@ -291,6 +291,12 @@
                                         <TextBlock x:Name="VoiceChipText" Text="Voice" />
                                     </StackPanel>
                                 </Button>
+                                <Button x:Name="TalkChip" Style="{StaticResource Chip}" ToolTip="Talk mode: a conversation, hands free">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE8F2;" FontSize="12" Margin="0,0,6,0" />
+                                        <TextBlock x:Name="TalkChipText" Text="Talk" />
+                                    </StackPanel>
+                                </Button>
                                 <Button x:Name="HomeChip" Style="{StaticResource Chip}" ToolTip="Open the Vigil app">
                                     <TextBlock Style="{StaticResource Glyph}" Text="&#xE80F;" FontSize="12" />
                                 </Button>

@@ -147,6 +147,9 @@ public sealed class VoiceController : IDisposable
         return time + " " + hello;
     }
 
+    /// <summary>Stops listening right now, if it is.</summary>
+    public void CancelListening() => _listen?.Cancel();
+
     /// <summary>The microphone button: listen now, no wake phrase needed.</summary>
     public void ListenNow()
     {

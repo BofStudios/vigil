@@ -89,6 +89,17 @@ public sealed class Speaker : IDisposable
         return match?.TwoLetterISOLanguageName ?? "en";
     }
 
+    PiperVoice? _piper;
+    volatile bool _piperFailed;
+
+    /// <summary>Is the local neural voice in place and in use?</summary>
+    public bool LocalVoiceReady => _config.TtsEngine is "auto" or "piper" && !_piperFailed && PiperVoice.Installed(_config.PiperVoice);
+
+    /// <summary>"alan" from en_GB-alan-medium.onnx - what to call the voice in a menu.</summary>
+    public string LocalVoiceName => PiperVoice.Model(_config.PiperVoice) is { } m
+        ? Path.GetFileNameWithoutExtension(m).Replace('_', ' ').Replace('-', ' ')
+        : "";
+
     /// <summary>Set once Groq has refused its voice - not asked again this session.</summary>
     volatile bool _groqRefused;
     volatile string? _workingGroqVoice;
@@ -227,6 +238,18 @@ public sealed class Speaker : IDisposable
         var code = Code(language);
         var engine = _config.TtsEngine;
 
+        // a neural voice on this computer comes first: nothing leaves the machine, no key, no terms
+        if (engine is "auto" or "piper" && !_piperFailed && PiperVoice.Model(_config.PiperVoice) is { } piperModel
+            && PiperVoice.LanguageOf(piperModel) == code && PiperVoice.Exe() is not null)
+        {
+            try { return await (_piper ??= new PiperVoice()).SpeakAsync(text, _config.PiperVoice, _config.SpeechRate, ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception)
+            {
+                _piperFailed = true;   // not asked again this session; the next voice takes over
+                Failed?.Invoke("The local voice stopped working (" + ex.Message + "), so another voice is speaking.");
+            }
+        }
+
         if ((engine is "auto" or "groq") && code == "en" && !_groqRefused && ProviderFactory.GroqVoice(_config) is { } groq)
         {
             // the configured voice first; if Groq has renamed its voices, the others it is known to offer
@@ -341,6 +364,7 @@ public sealed class Speaker : IDisposable
     public void Dispose()
     {
         Stop();
+        _piper?.Dispose();
         lock (_lock)
         {
             _output?.Stop();
