@@ -293,7 +293,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
-                    <Border x:Name="Frame" Background="{StaticResource Sunken}" BorderBrush="{StaticResource Edge}" BorderThickness="1" CornerRadius="12"
+                    <Border x:Name="Frame" Background="#12FFFFFF" BorderBrush="{StaticResource Edge}" BorderThickness="1" CornerRadius="12"
                             Padding="{TemplateBinding Padding}">
                         <ScrollViewer x:Name="PART_ContentHost" Focusable="False" VerticalScrollBarVisibility="Hidden" />
                     </Border>
@@ -317,7 +317,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="PasswordBox">
-                    <Border x:Name="Frame" Background="{StaticResource Sunken}" BorderBrush="{StaticResource Edge}" BorderThickness="1" CornerRadius="12"
+                    <Border x:Name="Frame" Background="#12FFFFFF" BorderBrush="{StaticResource Edge}" BorderThickness="1" CornerRadius="12"
                             Padding="{TemplateBinding Padding}">
                         <ScrollViewer x:Name="PART_ContentHost" Focusable="False" />
                     </Border>
@@ -329,6 +329,112 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- an iOS-style switch: a pill that slides, cyan when on -->
+    <Style x:Key="Switch" TargetType="CheckBox">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter VerticalAlignment="Center" Margin="0,0,16,0" />
+                        <Border x:Name="Track" Grid.Column="1" Width="42" Height="24" CornerRadius="12" Background="#2C2D34"
+                                BorderBrush="#14FFFFFF" BorderThickness="1" VerticalAlignment="Center">
+                            <Ellipse x:Name="Knob" Width="18" Height="18" Fill="#ECEDF0" HorizontalAlignment="Left" Margin="2,0,0,0">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="Slide" X="0" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="#3FB7D9" />
+                            <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right" />
+                            <Setter TargetName="Knob" Property="Margin" Value="0,0,2,0" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Slide" Storyboard.TargetProperty="X" From="-18" To="0" Duration="0:0:0.18">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Slide" Storyboard.TargetProperty="X" From="18" To="0" Duration="0:0:0.18">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- the sidebar: one row per page, a soft highlight on the one you are on -->
+    <Style x:Key="Nav" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{StaticResource TextDim}" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Row" CornerRadius="9" Padding="11,8" Background="Transparent">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" FontFamily="{StaticResource Icons}"
+                                       FontSize="15" Width="26" VerticalAlignment="Center" />
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="#0FFFFFFF" />
+                            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="#1CFFFFFF" />
+                            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Background" Value="#14FFFFFF" />
+        <Setter Property="BorderBrush" Value="#12FFFFFF" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="20,18" />
+    </Style>
+
+    <Style x:Key="Eyebrow" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource TextFaint}" />
+        <Setter Property="Margin" Value="0,0,0,10" />
     </Style>
 
     <!-- menus -->

@@ -84,6 +84,9 @@ public partial class ShellWindow
         ShowSetup();
         Snap(Shape.Panel);
         Shot(folder, "7-setup");
+        HideSetup();
+
+        new HomeWindow(this).RenderPages(folder);
     }
 
     void ShowApprovalPreview(GuardAction action)

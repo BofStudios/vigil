@@ -215,6 +215,7 @@ public partial class ShellWindow
         });
 
         NewChip.Click += (_, _) => NewConversation();
+        HomeChip.Click += (_, _) => OpenHome();
     }
 
     bool AnswersInEnglish => !string.Equals(_config.ReplyLanguage, "auto", StringComparison.OrdinalIgnoreCase);
@@ -371,15 +372,13 @@ public partial class ShellWindow
     // =================================================================== tray
     void WireTray()
     {
-        _tray.Clicked += () => Dispatcher.BeginInvoke(() =>
-        {
-            if (IsVisible && IsActive) HideToTray();
-            else Summon();
-        });
+        // the icon by the clock opens Vigil as an app; the bar has its own keys
+        _tray.Clicked += () => Dispatcher.BeginInvoke(OpenHome);
         _tray.MenuOpening += menu =>
         {
             menu.Items.Clear();
-            menu.Items.Add(Tray.Item("Show Vigil          Ctrl+Shift+Space", () => Dispatcher.BeginInvoke(Summon)));
+            menu.Items.Add(Tray.Item("Open Vigil", () => Dispatcher.BeginInvoke(OpenHome)));
+            menu.Items.Add(Tray.Item("Show the bar        Ctrl+Shift+Space", () => Dispatcher.BeginInvoke(Summon)));
             menu.Items.Add(Tray.Item("Talk                       Ctrl+<", () => Dispatcher.BeginInvoke(() => { Summon(); ToggleListening(); })));
             menu.Items.Add(new Forms.ToolStripSeparator());
             menu.Items.Add(Tray.Item("Listen for “Hey Vigil”", () => Dispatcher.BeginInvoke(ToggleWake), _config.WakeWord && _voice.WakeListening));
@@ -392,7 +391,8 @@ public partial class ShellWindow
                 catch (Exception ex) { Dispatcher.BeginInvoke(() => Toast("Could not change that: " + ex.Message)); }
             }, Startup.Enabled));
             menu.Items.Add(new Forms.ToolStripSeparator());
-            menu.Items.Add(Tray.Item("Open Vigil's folder", () => OpenUrl(Paths.Home)));
+            menu.Items.Add(Tray.Item("Open Vigil Mind", () => OpenUrl(Mind.Root)));
+            menu.Items.Add(Tray.Item("Open Vigil's settings folder", () => OpenUrl(Paths.Home)));
             menu.Items.Add(Tray.Item("What Vigil did (audit log)", () => { if (File.Exists(Paths.AuditLog)) OpenUrl(Paths.AuditLog); }));
             menu.Items.Add(new Forms.ToolStripSeparator());
             menu.Items.Add(Tray.Item("Quit Vigil", () => Dispatcher.BeginInvoke(Quit)));
