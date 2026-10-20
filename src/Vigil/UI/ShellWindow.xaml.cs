@@ -97,6 +97,7 @@ public partial class ShellWindow : Window
         WireVoice();
         WireFooter();
         WireTray();
+        WireFriend();
         BuildLevels();
         StartTrace();
     }
@@ -217,7 +218,9 @@ public partial class ShellWindow : Window
         var radius = Math.Min(h / 2, 26);
         Shell.CornerRadius = new CornerRadius(radius);
         Inner.Clip = new RectangleGeometry(new Rect(0, 0, Math.Max(0, w - 2), Math.Max(0, h - 2)), radius - 1, radius - 1);
-        Toasts.Margin = new Thickness(0, 16 + h + 14, 0, 0);
+        CheckInCard.Margin = new Thickness(0, 16 + h + 14, 0, 0);
+        var card = CheckInCard.Visibility == Visibility.Visible ? CheckInCard.ActualHeight + 12 : 0;
+        Toasts.Margin = new Thickness(0, 16 + h + 14 + card, 0, 0);
     }
 
     // ================================================================ panel height
@@ -358,6 +361,7 @@ public partial class ShellWindow : Window
         var foreground = Native.GetForegroundWindow();
         if (foreground != IntPtr.Zero && foreground != _hwnd && Native.GetWindowTextLength(foreground) > 0)
             _lastForeground = foreground;
+        SampleActivity(foreground);
 
         var fullscreen = Native.ForegroundIsFullscreen(_hwnd);
         if (fullscreen && !_yielded && !_summoned && !_approvalPending && !_askPending)
@@ -490,6 +494,8 @@ public partial class ShellWindow : Window
         if (_quitting) return;
         _quitting = true;
         _watch.Stop();
+        Activity.Save();
+        if (_config.Journal) Mind.Journal("closed", "Vigil was shut down");
         if (_hwnd != IntPtr.Zero)
         {
             Native.UnregisterHotKey(_hwnd, HotKeyId);

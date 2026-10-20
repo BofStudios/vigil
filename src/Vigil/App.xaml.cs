@@ -40,6 +40,13 @@ public partial class App : Application
 
         Paths.Ensure();
         var config = Config.Load();
+        Mind.UseRoot(config.MindFolder);
+        try
+        {
+            Mind.Ensure();
+            if (config.Journal) Mind.Journal("started", "Vigil is up");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log(ex); }
         var background = e.Args.Contains("--background") || config.StartHidden;
         _shell = new ShellWindow(config, background);
         if (!background) _shell.Show();

@@ -107,6 +107,7 @@ public partial class ShellWindow
         {
             case "anthropic": candidate.AnthropicApiKey = key; break;
             case "openai": candidate.OpenaiApiKey = key; break;
+            case "gemini": candidate.GeminiApiKey = key; break;
             case "ollama": candidate.OllamaHost = SetupHost.Text.Trim().Length > 0 ? SetupHost.Text.Trim() : Config.DefaultOllamaHost; break;
             default:
                 candidate.ApiKey = key;
@@ -253,6 +254,7 @@ public partial class ShellWindow
         {
             "anthropic" => Routes.ClaudeModels,
             "openai" => Routes.OpenAiModels,
+            "gemini" => Routes.GeminiModels,
             "ollama" => new Dictionary<string, string> { [_config.OllamaModel] = "installed with ollama pull" },
             _ => Routes.GroqModels,
         };

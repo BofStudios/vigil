@@ -8,6 +8,7 @@ public static class ProviderFactory
     {
         "anthropic" => new AnthropicProvider(config),
         "openai" => OpenAiCompatibleProvider.OpenAi(config),
+        "gemini" => OpenAiCompatibleProvider.Gemini(config),
         "ollama" => new OllamaProvider(config),
         _ => OpenAiCompatibleProvider.Groq(config),
     };

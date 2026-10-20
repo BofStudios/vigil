@@ -13,12 +13,13 @@ public sealed class Config
     public const string DefaultVisionModel = "qwen/qwen3.8-27b";
     public const string DefaultAnthropicModel = "claude-sonnet-5";
     public const string DefaultOpenAiModel = "gpt-6-astra";
+    public const string DefaultGeminiModel = "gemini-2.5-flash";
     public const string DefaultOllamaHost = "http://localhost:11434";
     public const string DefaultOllamaModel = "qwen3:8b";
     public const string DefaultOllamaVisionModel = "llama3.2-vision";
 
     public static readonly string[] ApprovalModes = { "ask", "auto", "yolo" };
-    public static readonly string[] Providers = { "groq", "anthropic", "openai", "ollama" };
+    public static readonly string[] Providers = { "groq", "gemini", "anthropic", "openai", "ollama" };
 
     // ------------------------------------------------------------- the brain
     public string Provider { get; set; } = "groq";
@@ -34,6 +35,10 @@ public sealed class Config
     public string OpenaiApiKey { get; set; } = "";
     public string OpenaiModel { get; set; } = DefaultOpenAiModel;
     public string OpenaiBaseUrl { get; set; } = "";
+
+    /// <summary>Google Gemini, through its OpenAI-compatible endpoint.</summary>
+    public string GeminiApiKey { get; set; } = "";
+    public string GeminiModel { get; set; } = DefaultGeminiModel;
 
     public string OllamaHost { get; set; } = DefaultOllamaHost;
     public string OllamaModel { get; set; } = DefaultOllamaModel;
@@ -94,6 +99,22 @@ public sealed class Config
     /// <summary>"en" answers in English whatever language it is spoken to in; "auto" answers in the user's language.</summary>
     public string ReplyLanguage { get; set; } = "en";
 
+    // ------------------------------------------------------------ friend
+    /// <summary>What Vigil calls you. Empty until you tell it.</summary>
+    public string UserName { get; set; } = "";
+    /// <summary>Where Vigil Mind lives. Empty means Documents\Vigil Mind.</summary>
+    public string MindFolder { get; set; } = "";
+    /// <summary>Write what was asked and done into Vigil Mind\Journal.</summary>
+    public bool Journal { get; set; } = true;
+    /// <summary>Know which app is in front (names and minutes only).</summary>
+    public bool Awareness { get; set; } = true;
+    /// <summary>Now and then, check in like a friend would.</summary>
+    public bool CheckIns { get; set; } = true;
+    /// <summary>How long in one app before a check-in, and the least time between two.</summary>
+    public int CheckInMinutes { get; set; } = 50;
+    /// <summary>Say check-ins out loud as well as showing them.</summary>
+    public bool SpeakCheckIns { get; set; } = false;
+
     // ---------------------------------------------------------------- window
     public bool StartHidden { get; set; } = false;
 
@@ -144,6 +165,7 @@ public sealed class Config
         ApiKey = Env("GROQ_API_KEY") ?? ApiKey;
         AnthropicApiKey = Env("ANTHROPIC_API_KEY") ?? AnthropicApiKey;
         OpenaiApiKey = Env("OPENAI_API_KEY") ?? OpenaiApiKey;
+        GeminiApiKey = Env("GEMINI_API_KEY") ?? GeminiApiKey;
         OpenaiBaseUrl = Env("OPENAI_BASE_URL") ?? OpenaiBaseUrl;
         OllamaHost = Env("OLLAMA_HOST") ?? OllamaHost;
         Model = Env("VIGIL_MODEL") ?? Model;
@@ -167,6 +189,7 @@ public sealed class Config
         SpeechPitch = Math.Clamp(SpeechPitch, 0.5, 1.5);
         FollowUpSeconds = Math.Clamp(FollowUpSeconds, 0, 30);
         ClapSensitivity = Math.Clamp(ClapSensitivity, 0.4, 2.5);
+        CheckInMinutes = Math.Clamp(CheckInMinutes, 10, 480);
         if (string.IsNullOrWhiteSpace(ReplyLanguage)) ReplyLanguage = "en";
         ProtectPaths ??= new();
     }
@@ -180,6 +203,7 @@ public sealed class Config
             "ollama" => OllamaModel,
             "anthropic" => AnthropicModel,
             "openai" => OpenaiModel,
+            "gemini" => GeminiModel,
             _ => Model,
         };
         set
@@ -189,6 +213,7 @@ public sealed class Config
                 case "ollama": OllamaModel = value; break;
                 case "anthropic": AnthropicModel = value; break;
                 case "openai": OpenaiModel = value; break;
+                case "gemini": GeminiModel = value; break;
                 default: Model = value; break;
             }
         }
@@ -200,6 +225,7 @@ public sealed class Config
         "ollama" => OllamaVisionModel,
         "anthropic" => AnthropicModel,  // Claude sees for itself
         "openai" => OpenaiModel,        // so does this one
+        "gemini" => GeminiModel,
         _ => VisionModel,
     };
 
@@ -210,6 +236,7 @@ public sealed class Config
         "ollama" => true,
         "anthropic" => AnthropicApiKey.Length > 0,
         "openai" => OpenaiApiKey.Length > 0,
+        "gemini" => GeminiApiKey.Length > 0,
         _ => ApiKey.Length > 0,
     };
 

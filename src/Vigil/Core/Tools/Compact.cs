@@ -108,6 +108,9 @@ public static class Compact
                 }));
 
         if (config.EnableMemory)
+            tools.AddRange(NoteTools.All);
+
+        if (config.EnableMemory)
             tools.Add(Facade("memory", "memory",
                 "Remember a lasting fact about the user (preferences, names), recall notes, or forget them. Never store secrets.",
                 Object(P("action", Str("", "remember", "recall", "forget"), true), P("text", Str("The fact, search words, or what to forget")),

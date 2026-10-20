@@ -52,6 +52,14 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
                    c.Temperature, "whisper-large-v3-turbo");
     }
 
+    public static OpenAiCompatibleProvider Gemini(Config c)
+    {
+        if (string.IsNullOrWhiteSpace(c.GeminiApiKey))
+            throw new AuthException("No Gemini key. Get one at https://aistudio.google.com/apikey");
+        return new("gemini", "https://generativelanguage.googleapis.com/v1beta/openai", c.GeminiApiKey,
+                   c.GeminiModel, c.GeminiModel, c.Temperature, "");
+    }
+
     public static OpenAiCompatibleProvider OpenAi(Config c)
     {
         if (string.IsNullOrWhiteSpace(c.OpenaiApiKey))

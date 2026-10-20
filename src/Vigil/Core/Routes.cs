@@ -45,6 +45,18 @@ public static class Routes
         new[] { ("openai/gpt-oss-20b", "fast, for everyday jobs"), ("openai/gpt-oss-120b", "stronger, for problems") },
         "https://console.groq.com/keys", "Get a free key", "gsk_…");
 
+    public static readonly IReadOnlyDictionary<string, string> GeminiModels = new Dictionary<string, string>
+    {
+        ["gemini-2.5-flash"] = "Fast, sees images, generous free tier (default)",
+        ["gemini-2.5-pro"] = "Strongest Gemini, slower",
+    };
+
+    public static readonly Route Gemini = new(
+        "gemini", "Gemini", "free key",
+        "Google's Gemini on your own key from AI Studio - there is a free tier. It sees the screen with the same model.",
+        GeminiModels.Select(m => (m.Key, m.Value)).ToArray(),
+        "https://aistudio.google.com/apikey", "Get a Gemini key", "AIza…");
+
     public static readonly Route Claude = new(
         "anthropic", "Claude", "your key",
         "Bring your own Anthropic key and Vigil runs on Claude. Not free, but it is the strongest " +
@@ -65,7 +77,7 @@ public static class Routes
         new[] { (Config.DefaultOllamaModel, "pull it with: ollama pull " + Config.DefaultOllamaModel) },
         "https://ollama.com/download", "Install Ollama", "http://localhost:11434", NeedsKey: false);
 
-    public static readonly IReadOnlyList<Route> All = new[] { Free, Claude, Gpt, Offline };
+    public static readonly IReadOnlyList<Route> All = new[] { Free, Gemini, Claude, Gpt, Offline };
 
     public static Route Get(string? key) =>
         All.FirstOrDefault(r => r.Key == (key ?? "").Trim().ToLowerInvariant()) ?? Free;
