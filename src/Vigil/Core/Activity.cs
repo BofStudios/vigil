@@ -30,7 +30,23 @@ public static class Activity
     /// <summary>How long the current app has been in front, without a break.</summary>
     public static TimeSpan Streak { get { lock (Gate) return _current.Length == 0 ? TimeSpan.Zero : DateTime.Now - _since; } }
 
-    public static bool Away => IdleTime() > IdleAfter;
+    public static bool Away => !_staged && IdleTime() > IdleAfter;
+
+    static bool _staged;
+
+    /// <summary>For `--preview` only: sample numbers in memory, never saved, so screenshots
+    /// can show a day without showing anybody's real one.</summary>
+    internal static void Stage(IEnumerable<(string App, double Seconds)> today, string current, TimeSpan streak)
+    {
+        lock (Gate)
+        {
+            _staged = _loaded = true;
+            Today.Clear();
+            foreach (var (app, seconds) in today) Today[app] = seconds;
+            _current = current;
+            _since = DateTime.Now - streak;
+        }
+    }
 
     /// <summary>Called a few times a minute with the foreground window.</summary>
     public static void Sample(IntPtr foreground, IntPtr ignore)
@@ -128,7 +144,7 @@ public static class Activity
         lock (Gate)
         {
             _saved = DateTime.Now;
-            if (Today.Count == 0) return;
+            if (Today.Count == 0 || _staged) return;
             try
             {
                 Mind.Ensure();

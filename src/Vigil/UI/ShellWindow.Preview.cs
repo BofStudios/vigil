@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Vigil.Core;
 using Vigil.Core.Security;
 using Vigil.Core.Tools;
 using Vigil.Voice;
@@ -19,6 +20,7 @@ public partial class ShellWindow
         _preview = true;
         Directory.CreateDirectory(folder);
         _watch.Stop();
+        if (Environment.GetEnvironmentVariable("VIGIL_PREVIEW_DEMO") == "1") StageDemo();
 
         Snap(Shape.Pill);
         Shot(folder, "1-pill");
@@ -87,6 +89,47 @@ public partial class ShellWindow
         HideSetup();
 
         new HomeWindow(this).RenderPages(folder);
+    }
+
+    /// <summary>VIGIL_PREVIEW_DEMO=1: a made-up day in a throwaway Vigil Mind, so pictures
+    /// for the README or an ad never show the real person's notes, journal or apps.</summary>
+    void StageDemo()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "vigil-demo-mind");
+        try { Directory.Delete(root, true); } catch (IOException) { }
+        Mind.UseRoot(root);
+        Mind.Ensure();
+        _config.UserName = "";
+        _config.Awareness = true;
+
+        Mind.WriteNote("Ideas", "A morning briefing: weather, calendar and the three things that matter today.\n\nVigil could read the news while the coffee is brewing.", append: false);
+        Mind.WriteNote("Pitch deck", "Problem, the demo, then the numbers. Keep it to ten slides.\nOpen with the clap.", append: false);
+        Mind.WriteNote("Groceries", "Coffee beans, oat milk, eggs, lemons.", append: false);
+
+        Mind.WriteNote("Launch checklist", "- [x] Record the demo\n- [x] Write the README\n- [ ] Post the carousel\n- [ ] Answer the first issues", append: false);
+        Mind.WriteNote("Launch checklist", "- [ ] Demo for the investors - Friday, 3 pm", append: true);
+
+        var day = DateTime.Now.Date;
+        var journal = new[]
+        {
+            "- 09:12  **asked**  What was I doing yesterday before I stopped?",
+            "- 09:12  **answered**  You were halfway through the pitch deck - the numbers slide. Shall I open it?",
+            "- 10:40  **did**  notes: write Ideas",
+            "- 13:05  **checked in**  Three hours in Figma. Want me to note where you got to before lunch?",
+            "- 14:22  **asked**  Clean up my Downloads folder",
+            "- 14:23  **did**  sorted 214 files into Images, Documents and Installers",
+            "- 16:48  **asked**  Remember that the demo is on Friday at 3 pm",
+            "- 16:48  **did**  notes: append Launch checklist",
+        };
+        File.WriteAllText(Path.Combine(root, "Journal", day.ToString("yyyy-MM-dd") + ".md"),
+                          "# " + day.ToString("dddd, d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture) + "\n\n" + string.Join("\n", journal) + "\n");
+
+        Activity.Stage(new (string, double)[]
+        {
+            ("Visual Studio Code", 3 * 3600 + 12 * 60), ("Figma", 1 * 3600 + 48 * 60), ("Google Chrome", 65 * 60),
+            ("Spotify", 52 * 60), ("Discord", 24 * 60), ("File Explorer", 9 * 60),
+        }, "Visual Studio Code", TimeSpan.FromMinutes(72));
+        _checkInMessage = "An hour and twelve minutes in VS Code since your break. Want me to write down where you got to, so you can pick it up tomorrow?";
     }
 
     void ShowApprovalPreview(GuardAction action)

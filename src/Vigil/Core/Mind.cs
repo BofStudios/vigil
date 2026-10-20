@@ -114,11 +114,15 @@ public static class Mind
         {
             Ensure();
             var file = NoteFile(title);
-            var stamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            // the file's own date says when a note was made; an addition says when it came,
+            // in words that read well in any editor, not only a markdown one
             if (append && File.Exists(file))
-                File.AppendAllText(file, "\r\n\r\n_" + stamp + "_\r\n\r\n" + text.Trim() + "\r\n");
+            {
+                var stamp = DateTime.Now.ToString("d MMM yyyy, HH:mm", CultureInfo.InvariantCulture);
+                File.AppendAllText(file, "\r\n— " + stamp + "\r\n" + text.Trim() + "\r\n");
+            }
             else
-                File.WriteAllText(file, "# " + Slug(title) + "\r\n\r\n_" + stamp + "_\r\n\r\n" + text.Trim() + "\r\n");
+                File.WriteAllText(file, "# " + Slug(title) + "\r\n\r\n" + text.Trim() + "\r\n");
             return file;
         }
     }
