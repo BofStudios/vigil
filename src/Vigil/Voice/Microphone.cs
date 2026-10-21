@@ -19,6 +19,7 @@ public sealed class Microphone : IDisposable
     WaveInEvent? _input;
     Capture? _capture;
     double _floor = 120;
+    DateTime _lastLoud = DateTime.MinValue;
 
     /// <summary>0..1, roughly how loud the room is right now. For the listening animation.</summary>
     public event Action<float>? Level;
@@ -80,6 +81,8 @@ public sealed class Microphone : IDisposable
             _floor = Math.Clamp(_floor, 40, 3000);
         }
 
+        if (rms > Threshold * 0.8) _lastLoud = now;
+
         Level?.Invoke((float)Math.Clamp(Math.Log10(1 + rms) / 4.0, 0, 1));
         if (capture is null) Claps.Feed(data);
         capture?.Feed(data, rms, Threshold);
@@ -102,10 +105,11 @@ public sealed class Microphone : IDisposable
     /// <summary>Listen until the person has said something and stopped.
     /// <paramref name="since"/> pulls in audio already heard (the words that came with
     /// the wake phrase). Returns a WAV, or null when nobody spoke.</summary>
-    public async Task<byte[]?> ListenAsync(TimeSpan waitForSpeech, DateTime? since, bool alreadySpoke, CancellationToken ct)
+    public async Task<byte[]?> ListenAsync(TimeSpan waitForSpeech, DateTime? since, bool alreadySpoke, CancellationToken ct,
+                                           bool conversation = false)
     {
         Start();
-        var capture = new Capture(waitForSpeech, alreadySpoke);
+        var capture = new Capture(waitForSpeech, alreadySpoke, conversation);
         lock (_lock)
         {
             if (since is { } from)
@@ -123,17 +127,33 @@ public sealed class Microphone : IDisposable
             lock (_lock)
                 if (_capture == capture) _capture = null;
         }
-        return capture.HeardSpeech ? capture.ToWav() : null;
+        return capture.Heard ? capture.ToWav() : null;
+    }
+
+    /// <summary>Returns once the room has been quiet for a moment, or after `most`. Used right after
+    /// Vigil has spoken: the speaker's tail and the room's echo die away before anyone listens.</summary>
+    public async Task WaitForQuietAsync(TimeSpan most, CancellationToken ct)
+    {
+        var until = DateTime.UtcNow + most;
+        while (DateTime.UtcNow < until)
+        {
+            if (DateTime.UtcNow - _lastLoud > TimeSpan.FromMilliseconds(450)) return;
+            await Task.Delay(40, ct).ConfigureAwait(false);
+        }
     }
 
     public void Dispose() => Stop();
 
     /// <summary>One utterance being captured: waiting for speech, then for the silence after it.</summary>
-    sealed class Capture(TimeSpan waitForSpeech, bool alreadySpoke)
+    sealed class Capture(TimeSpan waitForSpeech, bool alreadySpoke, bool conversation)
     {
-        const int SpeechFrames = 4;        // ~120 ms above the threshold counts as speaking
-        static readonly TimeSpan EndSilence = TimeSpan.FromMilliseconds(950);
+        // a conversation wants more than a blip to count as someone speaking: a door, a cough,
+        // the last echo of Vigil's own voice are all short
+        readonly int SpeechFrames = conversation ? 7 : 4;        // 30 ms each: ~210 ms / ~120 ms above the threshold
+        const int WordFrames = 10;                               // ~300 ms of voice in all, for a conversation turn
+        readonly TimeSpan EndSilence = TimeSpan.FromMilliseconds(conversation ? 800 : 950);
         static readonly TimeSpan Longest = TimeSpan.FromSeconds(30);
+        int _voiced;
 
         readonly MemoryStream _audio = new();
         readonly DateTime _started = DateTime.UtcNow;
@@ -143,6 +163,7 @@ public sealed class Microphone : IDisposable
         public TaskCompletionSource<bool> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Speaking { get; private set; } = alreadySpoke;
         public bool HeardSpeech { get; private set; } = alreadySpoke;
+        public bool Heard => HeardSpeech && (!conversation || alreadySpoke || _voiced >= WordFrames);
 
         public void Preroll(byte[] data) => _audio.Write(data);
 
@@ -154,6 +175,7 @@ public sealed class Microphone : IDisposable
 
             if (rms > threshold)
             {
+                _voiced++;
                 if (++_loudFrames >= SpeechFrames)
                 {
                     Speaking = true;

@@ -617,7 +617,7 @@ public partial class ShellWindow : IAgentHost
     {
         await _voice.Speaker.IdleAsync();
         if (pending.Task.IsCompleted) return;
-        var heard = await _voice.ListenAsync(TimeSpan.FromSeconds(8), null, false, chime: true);
+        var heard = await _voice.ListenAsync(TimeSpan.FromSeconds(_talking ? 14 : 8), null, false, chime: !_talking, conversation: _talking);
         if (heard is not null && !pending.Task.IsCompleted)
             await Dispatcher.InvokeAsync(() => AnswerAsk(heard.Text));
     }

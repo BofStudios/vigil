@@ -17,7 +17,6 @@ public static class SpeechText
         @"sous-titres.*|untertitel.*|subtitles by.*|\[(music|silence|blank_audio)\]|\(music\)|\.+)\W*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    /// <summary>"Hey Vigil, open Notepad" -> "open Notepad".</summary>
     static readonly Regex EndTalkWords = new(
         @"^\W*(that'?s all|that is all|that will be all|that'?s it|goodbye|good ?bye|bye( bye)?|talk mode off|end (the )?(talk|conversation)|we'?re done|thanks,? (that'?s all|bye)|görüşürüz|hoşça kal|sohbeti bitir|bu kadar)\W*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -31,6 +30,35 @@ public static class SpeechText
 
     /// <summary>"Let's talk", "talk mode": the whole utterance starts one.</summary>
     public static bool StartsTalk(string heard) => StartTalkWords.IsMatch(heard);
+
+    static List<string> Words(string text) =>
+        Regex.Matches(text.ToLowerInvariant(), @"[\p{L}\p{N}']+").Select(m => m.Value).ToList();
+
+    static readonly HashSet<string> ShortReplies = new()
+    {
+        "yes", "no", "yeah", "yep", "nope", "ok", "okay", "sure", "stop", "thanks", "thank", "please", "go", "continue",
+        "next", "cancel", "evet", "hayır", "tamam", "dur",
+    };
+
+    /// <summary>Is this just Vigil's own voice coming back in through the microphone? True when what
+    /// was "heard" is, almost word for word, a stretch of what was just said. A real reply that merely
+    /// shares a few words with the question ("yes, set it for 7 am") is not an echo.</summary>
+    public static bool IsEcho(string heard, string said)
+    {
+        var h = Words(heard);
+        var s = Words(said);
+        if (h.Count < 3 || s.Count == 0) return false;   // "yes", "stop", "no thanks" are answers
+
+        var best = 0;
+        for (var i = 0; i < h.Count; i++)
+            for (var j = 0; j < s.Count; j++)
+            {
+                var k = 0;
+                while (i + k < h.Count && j + k < s.Count && h[i + k] == s[j + k]) k++;
+                best = Math.Max(best, k);
+            }
+        return best >= Math.Ceiling(h.Count * 0.9);
+    }
 
     public static string StripWake(string heard)
     {

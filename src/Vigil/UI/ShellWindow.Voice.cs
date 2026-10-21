@@ -104,6 +104,7 @@ public partial class ShellWindow
     bool _talking;
     bool _talkListening;
     int _quietRounds;
+    readonly Queue<DateTime> _turns = new();
 
     internal bool Talking => _talking;
 
@@ -129,6 +130,7 @@ public partial class ShellWindow
         if (!_voice.On && !_voice.Start()) return;
         _talking = true;
         _quietRounds = 0;
+        _turns.Clear();
         if (Busy) _agent?.Stop();
         OnWoken();
         RefreshFooter();
@@ -169,9 +171,10 @@ public partial class ShellWindow
             while (_talking && !Busy && !_askPending && !_approvalPending)
             {
                 var began = DateTime.UtcNow;
-                await Task.Delay(250);   // let the end of its own voice die away first
+                await Task.Delay(250);
                 if (!_talking || Busy) break;
-                var heard = await _voice.ListenAsync(TimeSpan.FromSeconds(25), null, false, chime: false);
+                // conversation: it waits for the room to go quiet first, and wants more than a blip
+                var heard = await _voice.ListenAsync(TimeSpan.FromSeconds(25), null, false, chime: false, conversation: true);
                 if (!_talking) break;
                 if (heard is null)
                 {
@@ -185,6 +188,22 @@ public partial class ShellWindow
                     continue;
                 }
                 _quietRounds = 0;
+                App.Note("talk: heard (" + heard.Language + ") " + heard.Text);
+
+                // the brake: several turns in a few seconds is not a conversation, it is Vigil
+                // listening to itself (speakers and a microphone in one room)
+                var now = DateTime.UtcNow;
+                _turns.Enqueue(now);
+                while (_turns.Count > 0 && now - _turns.Peek() > TimeSpan.FromSeconds(25)) _turns.Dequeue();
+                if (_turns.Count >= 4)
+                {
+                    App.Note("talk: stopped, " + _turns.Count + " turns in 25 s");
+                    _voice.Speaker.Stop();
+                    EndTalk();
+                    Toast("Talk mode stopped: it kept hearing itself. Headphones fix that - or lower the volume and try again.", B("Moderate"));
+                    break;
+                }
+
                 OnHeard(heard);
                 if (Busy) break;   // it is answering; when it has finished, the answer calls this again
             }

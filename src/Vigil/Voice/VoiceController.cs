@@ -167,7 +167,8 @@ public sealed class VoiceController : IDisposable
     }
 
     /// <summary>Records one utterance and turns it into words. Null when nothing was said.</summary>
-    public async Task<Utterance?> ListenAsync(TimeSpan wait, DateTime? since, bool alreadySpoke, bool chime, CancellationToken ct = default)
+    public async Task<Utterance?> ListenAsync(TimeSpan wait, DateTime? since, bool alreadySpoke, bool chime, CancellationToken ct = default,
+                                              bool conversation = false)
     {
         if (!await _listening.WaitAsync(0, ct).ConfigureAwait(false)) return null;
         var ears = ProviderFactory.Ears(_config);
@@ -181,10 +182,17 @@ public sealed class VoiceController : IDisposable
             if (!Mic.Running && !Start()) return null;
 
             _listen = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            if (conversation)
+            {
+                // straight after Vigil has spoken the room still rings: let it die away first, or the
+                // tail of its own voice is taken for someone speaking
+                try { await Mic.WaitForQuietAsync(TimeSpan.FromSeconds(1.6), _listen.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException) { State = VoiceState.Idle; return null; }
+            }
             if (chime) Speaker.Chime();
             State = VoiceState.Listening;
             byte[]? wav;
-            try { wav = await Mic.ListenAsync(wait, since, alreadySpoke, _listen.Token).ConfigureAwait(false); }
+            try { wav = await Mic.ListenAsync(wait, since, alreadySpoke, _listen.Token, conversation).ConfigureAwait(false); }
             catch (OperationCanceledException) { wav = null; }
             if (wav is null)
             {
@@ -206,6 +214,13 @@ public sealed class VoiceController : IDisposable
             var text = SpeechText.StripWake(transcript.Text);
             State = VoiceState.Idle;
             if (SpeechText.IsNoise(text)) return null;
+            // Vigil's own voice coming back in: right after it spoke, and nearly word for word what it said
+            if (DateTime.UtcNow - Speaker.LastSpokeEnd < TimeSpan.FromSeconds(8) &&
+                SpeechText.IsEcho(text, Speaker.RecentSpeech(TimeSpan.FromSeconds(45))))
+            {
+                Vigil.App.Note("voice: ignored its own echo: " + text);
+                return null;
+            }
             var language = string.IsNullOrWhiteSpace(transcript.Language) ? SpeechText.GuessLanguage(text, "en") : transcript.Language;
             return new Utterance(text, language);
         }

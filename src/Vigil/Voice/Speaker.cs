@@ -150,8 +150,29 @@ public sealed class Speaker : IDisposable
         }
     }
 
+    readonly List<(DateTime At, string Text)> _said = new();
+
+    /// <summary>When Vigil last finished speaking.</summary>
+    public DateTime LastSpokeEnd { get; private set; } = DateTime.MinValue;
+
+    /// <summary>What Vigil said in the last little while - so its own voice, coming back in through
+    /// the microphone, can be told from the person.</summary>
+    public string RecentSpeech(TimeSpan within)
+    {
+        lock (_said)
+        {
+            var from = DateTime.UtcNow - within;
+            return string.Join(" ", _said.Where(s => s.At >= from).Select(s => s.Text));
+        }
+    }
+
     void Write(string sentence)
     {
+        lock (_said)
+        {
+            _said.Add((DateTime.UtcNow, sentence));
+            if (_said.Count > 16) _said.RemoveAt(0);
+        }
         Interlocked.Increment(ref _pending);
         if (!_sentences!.Writer.TryWrite(sentence)) Interlocked.Decrement(ref _pending);
     }
@@ -358,6 +379,7 @@ public sealed class Speaker : IDisposable
     {
         if (Speaking == speaking) return;
         Speaking = speaking;
+        if (!speaking) LastSpokeEnd = DateTime.UtcNow;
         SpeakingChanged?.Invoke(speaking);
     }
 
