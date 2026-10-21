@@ -191,6 +191,12 @@ internal static partial class Native
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(current | style));
     }
 
+    public static void RemoveExStyle(IntPtr hwnd, long style)
+    {
+        var current = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(current & ~style));
+    }
+
     [DllImport("user32.dll")] public static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
     /// <summary>Shown on the screen, left out of every capture - including Vigil's own.</summary>
     public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;

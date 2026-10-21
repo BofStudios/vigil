@@ -18,14 +18,14 @@
                 <BlurEffect Radius="34" RenderingBias="Performance" />
             </Border.Effect>
         </Border>
-        <Border x:Name="ShadowFar" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0" Opacity="0.62"
+        <Border x:Name="ShadowFar" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,30,0,0" Opacity="0.26"
                 Width="{Binding ActualWidth, ElementName=Shell}" Height="{Binding ActualHeight, ElementName=Shell}"
                 CornerRadius="{Binding CornerRadius, ElementName=Shell}" Background="Black" IsHitTestVisible="False">
             <Border.Effect>
-                <BlurEffect Radius="44" RenderingBias="Performance" />
+                <BlurEffect Radius="34" RenderingBias="Performance" />
             </Border.Effect>
         </Border>
-        <Border x:Name="ShadowNear" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,22,0,0" Opacity="0.5"
+        <Border x:Name="ShadowNear" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Opacity="0.3"
                 Width="{Binding ActualWidth, ElementName=Shell}" Height="{Binding ActualHeight, ElementName=Shell}"
                 CornerRadius="{Binding CornerRadius, ElementName=Shell}" Background="Black" IsHitTestVisible="False">
             <Border.Effect>
@@ -387,7 +387,7 @@
         <!-- a friend checking in: under the shell, never takes focus -->
         <Grid x:Name="CheckInCard" HorizontalAlignment="Center" VerticalAlignment="Top" Width="480" Margin="0,64,0,0"
               Visibility="Collapsed" Opacity="0">
-            <Border Background="Black" CornerRadius="18" Margin="0,14,0,-14" Opacity="0.55" IsHitTestVisible="False">
+            <Border Background="Black" CornerRadius="18" Margin="0,10,0,-10" Opacity="0.28" IsHitTestVisible="False">
                 <Border.Effect>
                     <BlurEffect Radius="30" />
                 </Border.Effect>

@@ -94,6 +94,7 @@ public partial class ShellWindow : Window
         AskCard.SizeChanged += (_, _) => FitSoon();
 
         WireHost();
+        WireHitArea();
         WireVoice();
         WireFooter();
         WireTray();
