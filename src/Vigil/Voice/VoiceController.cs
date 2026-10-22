@@ -7,8 +7,11 @@ public enum VoiceState { Off, Idle, Listening, Hearing, Thinking, Speaking }
 
 public sealed record Utterance(string Text, string Language);
 
-/// <summary>The ears and the mouth together: wakes on the phrase, records until the
-/// person stops, turns it into words, and speaks the answer back.</summary>
+/// <summary>The ears and the mouth together.
+///
+/// By default Vigil listens only while you hold Ctrl+&lt; (or after a tap of it, or a click
+/// of the mic, until you stop talking) - the microphone is closed the rest of the time.
+/// "Hey Vigil" and three claps are there for anyone who wants them always open.</summary>
 public sealed class VoiceController : IDisposable
 {
     static readonly TimeSpan ShortWake = TimeSpan.FromSeconds(1.5);
@@ -56,12 +59,15 @@ public sealed class VoiceController : IDisposable
         Speaker.SpeakingChanged += speaking =>
         {
             Wake.Strict = speaking;
+            // its own voice must never count as three claps: deaf to them while it speaks, and for a moment after
+            Mic.ClapsDeafUntil = speaking ? DateTime.MaxValue : DateTime.UtcNow + TimeSpan.FromSeconds(1.2);
             if (speaking) State = VoiceState.Speaking;
             else if (State == VoiceState.Speaking) State = VoiceState.Idle;
         };
     }
 
-    /// <summary>Opens the microphone and starts waiting for "Hey Vigil".</summary>
+    /// <summary>Gets voice ready. The microphone itself opens only if something needs it open all
+    /// the time (three claps); "Hey Vigil" uses Windows' own recogniser.</summary>
     public bool Start()
     {
         if (!Microphone.Available)
@@ -69,19 +75,44 @@ public sealed class VoiceController : IDisposable
             Problem?.Invoke("No microphone was found.");
             return false;
         }
-        try { Mic.Start(); }
+        Wake.Sensitivity = _config.WakeSensitivity;
+        Mic.Claps.Sensitivity = _config.ClapSensitivity;
+        if (_config.ClapToWake && !OpenMic()) return false;
+        if (_config.WakeWord && !Wake.Start())
+            Problem?.Invoke(Wake.Problem);
+        State = VoiceState.Idle;
+        return true;
+    }
+
+    /// <summary>Follows the settings after they change: opens or closes what is always on.</summary>
+    public void Refresh()
+    {
+        if (!On) return;
+        if (_config.WakeWord) { if (!Wake.Running && !Wake.Start()) Problem?.Invoke(Wake.Problem); }
+        else Wake.Stop();
+        if (_config.ClapToWake) OpenMic();
+        else if (_listening.CurrentCount == 1) Mic.Stop();   // not in the middle of listening
+    }
+
+    bool OpenMic()
+    {
+        try
+        {
+            Mic.Start();
+            return true;
+        }
         catch (Exception ex) when (ex is InvalidOperationException or NAudio.MmException)
         {
             Problem?.Invoke("Could not open the microphone: " + ex.Message +
                             ". Check Settings > Privacy & security > Microphone > Let desktop apps access your microphone.");
             return false;
         }
-        Wake.Sensitivity = _config.WakeSensitivity;
-        Mic.Claps.Sensitivity = _config.ClapSensitivity;
-        if (_config.WakeWord && !Wake.Start())
-            Problem?.Invoke(Wake.Problem);
-        State = VoiceState.Idle;
-        return true;
+    }
+
+    /// <summary>Closes the microphone when nothing needs it open between turns.</summary>
+    void CloseMicIfIdle()
+    {
+        if (!_config.ClapToWake) Mic.Stop();
     }
 
     public void Stop()
@@ -95,9 +126,11 @@ public sealed class VoiceController : IDisposable
 
     public bool WakeListening => Wake.Running;
 
+    public bool Listening => State is VoiceState.Listening or VoiceState.Hearing;
+
     void OnWake(DateTime began, TimeSpan duration)
     {
-        if (State is VoiceState.Listening or VoiceState.Hearing) return;
+        if (Listening) return;
         if (Speaker.Speaking) Speaker.Stop();   // "Hey Vigil" while it talks: stop and listen
         Woken?.Invoke();
         var oneBreath = duration > ShortWake;
@@ -109,11 +142,10 @@ public sealed class VoiceController : IDisposable
         });
     }
 
-    /// <summary>Called by three claps or the talk key: come forward, say a word if asked to,
-    /// then listen. A second press while it is listening stops it.</summary>
+    /// <summary>Called by three claps: come forward, say a word if asked to, then listen.</summary>
     public void Summon(bool greet)
     {
-        if (State is VoiceState.Listening or VoiceState.Hearing)
+        if (Listening)
         {
             _listen?.Cancel();
             return;
@@ -128,7 +160,7 @@ public sealed class VoiceController : IDisposable
                 await Speaker.WhenDoneAsync().ConfigureAwait(false);
                 await Task.Delay(120).ConfigureAwait(false);   // let the room go quiet before listening
             }
-            var heard = await ListenAsync(TimeSpan.FromSeconds(7), null, false, chime: !greet).ConfigureAwait(false);
+            var heard = await ListenAsync(TimeSpan.FromSeconds(7), null, false, chime: !greet, conversation: true).ConfigureAwait(false);
             if (heard is not null) Heard?.Invoke(heard);
         });
     }
@@ -150,23 +182,61 @@ public sealed class VoiceController : IDisposable
     /// <summary>Stops listening right now, if it is.</summary>
     public void CancelListening() => _listen?.Cancel();
 
-    /// <summary>The microphone button: listen now, no wake phrase needed.</summary>
-    public void ListenNow()
+    // ============================================================ push to talk
+    /// <summary>Starts recording now, for as long as the key is held: call Release() when it is let
+    /// go, or KeepListening() after a tap to listen until the person stops talking. Cuts off
+    /// whatever Vigil was saying - pressing to talk is how you interrupt it. Null if it can't listen.</summary>
+    public Microphone.Recording? PressToTalk()
     {
-        if (State is VoiceState.Listening or VoiceState.Hearing)
-        {
-            _listen?.Cancel();
-            return;
-        }
         Speaker.Stop();
-        _ = Task.Run(async () =>
+        if (!_listening.Wait(0))
         {
-            var heard = await ListenAsync(TimeSpan.FromSeconds(7), null, false, chime: true).ConfigureAwait(false);
-            if (heard is not null) Heard?.Invoke(heard);
-        });
+            // something else is listening (a follow-up, the wake phrase): the key wins
+            _listen?.Cancel();
+            if (!_listening.Wait(400)) return null;
+        }
+        var ears = ProviderFactory.Ears(_config);
+        if (ears is null)
+        {
+            _listening.Release();
+            Problem?.Invoke("To understand speech Vigil needs a Groq key (free) or an OpenAI key. Add one in settings.");
+            return null;
+        }
+        if ((State == VoiceState.Off && !Start()) || !OpenMic())
+        {
+            _listening.Release();
+            return null;
+        }
+        _listen = new CancellationTokenSource();
+        var recording = Mic.Record(TimeSpan.FromSeconds(7), _listen.Token);
+        State = VoiceState.Listening;
+        _ = FinishAsync(recording, ears, _listen.Token);
+        return recording;
     }
 
-    /// <summary>Records one utterance and turns it into words. Null when nothing was said.</summary>
+    async Task FinishAsync(Microphone.Recording recording, ITranscriber ears, CancellationToken ct)
+    {
+        try
+        {
+            byte[]? wav;
+            try { wav = await recording.Result.ConfigureAwait(false); }
+            catch (OperationCanceledException) { wav = null; }
+            if (wav is null) { State = VoiceState.Idle; return; }
+            var heard = await TranscribeAsync(wav, ears, ct).ConfigureAwait(false);
+            if (heard is not null) Heard?.Invoke(heard);
+        }
+        finally
+        {
+            _listen?.Dispose();
+            _listen = null;
+            CloseMicIfIdle();
+            _listening.Release();
+        }
+    }
+
+    // ================================================================ listening
+    /// <summary>Records one utterance, until the person stops talking, and turns it into words.
+    /// Null when nothing was said.</summary>
     public async Task<Utterance?> ListenAsync(TimeSpan wait, DateTime? since, bool alreadySpoke, bool chime, CancellationToken ct = default,
                                               bool conversation = false)
     {
@@ -179,7 +249,7 @@ public sealed class VoiceController : IDisposable
                 Problem?.Invoke("To understand speech Vigil needs a Groq key (free) or an OpenAI key. Add one in settings.");
                 return null;
             }
-            if (!Mic.Running && !Start()) return null;
+            if ((State == VoiceState.Off && !Start()) || !OpenMic()) return null;
 
             _listen = CancellationTokenSource.CreateLinkedTokenSource(ct);
             if (conversation)
@@ -199,37 +269,42 @@ public sealed class VoiceController : IDisposable
                 State = VoiceState.Idle;
                 return null;
             }
-
-            State = VoiceState.Hearing;
-            Transcript transcript;
-            try { transcript = await ears.TranscribeAsync(wav, _config.VoiceLanguage, _listen.Token).ConfigureAwait(false); }
-            catch (OperationCanceledException) { State = VoiceState.Idle; return null; }
-            catch (ProviderException ex)
-            {
-                Problem?.Invoke("Could not make out the words: " + ex.Message);
-                State = VoiceState.Idle;
-                return null;
-            }
-
-            var text = SpeechText.StripWake(transcript.Text);
-            State = VoiceState.Idle;
-            if (SpeechText.IsNoise(text)) return null;
-            // Vigil's own voice coming back in: right after it spoke, and nearly word for word what it said
-            if (DateTime.UtcNow - Speaker.LastSpokeEnd < TimeSpan.FromSeconds(8) &&
-                SpeechText.IsEcho(text, Speaker.RecentSpeech(TimeSpan.FromSeconds(45))))
-            {
-                Vigil.App.Note("voice: ignored its own echo: " + text);
-                return null;
-            }
-            var language = string.IsNullOrWhiteSpace(transcript.Language) ? SpeechText.GuessLanguage(text, "en") : transcript.Language;
-            return new Utterance(text, language);
+            return await TranscribeAsync(wav, ears, _listen.Token).ConfigureAwait(false);
         }
         finally
         {
             _listen?.Dispose();
             _listen = null;
+            CloseMicIfIdle();
             _listening.Release();
         }
+    }
+
+    async Task<Utterance?> TranscribeAsync(byte[] wav, ITranscriber ears, CancellationToken ct)
+    {
+        State = VoiceState.Hearing;
+        Transcript transcript;
+        try { transcript = await ears.TranscribeAsync(wav, _config.VoiceLanguage, ct).ConfigureAwait(false); }
+        catch (OperationCanceledException) { State = VoiceState.Idle; return null; }
+        catch (ProviderException ex)
+        {
+            Problem?.Invoke("Could not make out the words: " + ex.Message);
+            State = VoiceState.Idle;
+            return null;
+        }
+
+        var text = SpeechText.StripWake(transcript.Text);
+        State = VoiceState.Idle;
+        if (SpeechText.IsNoise(text)) return null;
+        // Vigil's own voice coming back in: right after it spoke, and nearly word for word what it said
+        if (DateTime.UtcNow - Speaker.LastSpokeEnd < TimeSpan.FromSeconds(8) &&
+            SpeechText.IsEcho(text, Speaker.RecentSpeech(TimeSpan.FromSeconds(45))))
+        {
+            Vigil.App.Note("voice: ignored its own echo: " + text);
+            return null;
+        }
+        var language = string.IsNullOrWhiteSpace(transcript.Language) ? SpeechText.GuessLanguage(text, "en") : transcript.Language;
+        return new Utterance(text, language);
     }
 
     /// <summary>Marks the stretch between a question and the first spoken word of the answer.</summary>

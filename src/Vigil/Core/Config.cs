@@ -65,19 +65,23 @@ public sealed class Config
 
     // ----------------------------------------------------------------- voice
     public bool EnableVoice { get; set; } = true;
-    /// <summary>Listen for "Hey Vigil". The wake phrase is recognised on this
-    /// machine; nothing leaves it until the phrase has been heard.</summary>
-    public bool WakeWord { get; set; } = true;
+    /// <summary>Listen for "Hey Vigil" all the time. Off by default: Vigil listens while Ctrl+&lt; is held.
+    /// The wake phrase is recognised on this machine; nothing leaves it until the phrase has been heard.</summary>
+    public bool WakeWord { get; set; } = false;
     /// <summary>0..1 - how sure the recogniser has to be before it wakes.</summary>
     public double WakeSensitivity { get; set; } = 0.55;
     /// <summary>Empty means: work out the language from what was said.</summary>
     public string VoiceLanguage { get; set; } = "";
     /// <summary>Read answers aloud when the question was spoken.</summary>
     public bool SpeakReplies { get; set; } = true;
-    /// <summary>auto picks the most natural voice it can reach for each language, a neural voice on
-    /// this computer (piper) first; piper, windows, groq (natural English on the free key) and
-    /// cloud (OpenAI, every language) force one.</summary>
+    /// <summary>auto picks the most natural voice it can reach: ElevenLabs with a key, then a neural voice
+    /// on this computer (piper), Groq, OpenAI, Windows. elevenlabs, piper, windows, groq and cloud force one.</summary>
     public string TtsEngine { get; set; } = "auto";
+    public string ElevenLabsApiKey { get; set; } = "";
+    /// <summary>An ElevenLabs voice id; Daniel - British, deep, calm - by default.</summary>
+    public string ElevenLabsVoice { get; set; } = "onwK4e9ZLuTAKqWW03F9";
+    /// <summary>Flash: the quickest to start speaking, and it speaks every language.</summary>
+    public string ElevenLabsModel { get; set; } = "eleven_flash_v2_5";
     /// <summary>Part of the file name of a Piper voice in ~/.vigil/voices/piper, e.g. "alan"; empty takes the first one found.</summary>
     public string PiperVoice { get; set; } = "";
     public string GroqTtsModel { get; set; } = "canopylabs/orpheus-v1-english";
@@ -92,9 +96,12 @@ public sealed class Config
     public string CloudTtsStyle { get; set; } =
         "Calm, articulate and warm, with a measured pace and a quiet, dry wit - an unflappable butler who also runs the computer.";
     /// <summary>After Vigil speaks, keep listening this long for a follow-up without the wake phrase.</summary>
-    public double FollowUpSeconds { get; set; } = 6.0;
-    /// <summary>Three claps in a row open Vigil and start listening.</summary>
-    public bool ClapToWake { get; set; } = true;
+    /// <summary>0 (the default): after it speaks, the microphone stays closed until you hold Ctrl+&lt; again.</summary>
+    public double FollowUpSeconds { get; set; } = 0;
+    /// <summary>Three claps in a row open Vigil and start listening - needs the microphone open all the time.</summary>
+    public bool ClapToWake { get; set; } = false;
+    /// <summary>Which voice defaults this file has been brought up to.</summary>
+    public int VoiceVersion { get; set; }
     /// <summary>1 is the default; higher hears quieter claps.</summary>
     public double ClapSensitivity { get; set; } = 1.0;
     /// <summary>Say a short hello when summoned by claps, before listening.</summary>
@@ -169,6 +176,7 @@ public sealed class Config
         AnthropicApiKey = Env("ANTHROPIC_API_KEY") ?? AnthropicApiKey;
         OpenaiApiKey = Env("OPENAI_API_KEY") ?? OpenaiApiKey;
         GeminiApiKey = Env("GEMINI_API_KEY") ?? GeminiApiKey;
+        ElevenLabsApiKey = Env("ELEVENLABS_API_KEY") ?? ElevenLabsApiKey;
         OpenaiBaseUrl = Env("OPENAI_BASE_URL") ?? OpenaiBaseUrl;
         OllamaHost = Env("OLLAMA_HOST") ?? OllamaHost;
         Model = Env("VIGIL_MODEL") ?? Model;
@@ -195,7 +203,20 @@ public sealed class Config
         CheckInMinutes = Math.Clamp(CheckInMinutes, 10, 480);
         if (string.IsNullOrWhiteSpace(ReplyLanguage)) ReplyLanguage = "en";
         ProtectPaths ??= new();
+        if (VoiceVersion < 3)
+        {
+            // voice 3: push to talk. Nothing listens all the time unless it is switched back on
+            WakeWord = false;
+            ClapToWake = false;
+            FollowUpSeconds = 0;
+            VoiceVersion = 3;
+            Migrated = true;
+        }
     }
+
+    /// <summary>Set when Load brought an older file up to date, so it is saved once.</summary>
+    [JsonIgnore]
+    public bool Migrated { get; private set; }
 
     // ------------------------------------------------- the active provider's models
     [JsonIgnore]

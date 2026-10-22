@@ -193,7 +193,10 @@ public partial class ShellWindow
             Option("Clap three times to wake", "three even claps open Vigil and it listens", _config.ClapToWake, ToggleClaps),
             Option("Answer in English", "whatever language you speak to it in", AnswersInEnglish, ToggleEnglish),
             Option("Speak answers", "when you asked by voice", _config.SpeakReplies, () => { _config.SpeakReplies = !_config.SpeakReplies; Save(); }),
-            Option("Talk mode", "a hands-free conversation: it listens again after every answer", _talking, ToggleTalk),
+            Option("Talk mode", "every answer spoken; hold Ctrl+< to talk, or to interrupt", _talking, ToggleTalk),
+            Option("ElevenLabs voice…", _voice.Speaker.ElevenLabsReady ? Voice.ElevenLabs.NameOf(_config.ElevenLabsVoice) + " - the most natural voice"
+                                                                       : "add your ElevenLabs key in the app's Settings",
+                   _voice.Speaker.ElevenLabsReady, OpenHome),
             Option("Best voice available", LocalVoiceLine(),
                    _config.TtsEngine is "auto" or "groq" or "piper", () => SetVoiceEngine("auto")),
             Option("Windows voice only", VoiceName() + " - on this computer", _config.TtsEngine == "windows", () => SetVoiceEngine("windows")),
@@ -239,6 +242,7 @@ public partial class ShellWindow
         _config.ClapToWake = !_config.ClapToWake;
         Save();
         if (_config.ClapToWake && !_voice.On) StartVoice(quiet: true);
+        _voice.Refresh();
         Toast(_config.ClapToWake ? "Clap three times and Vigil comes forward, listening." : "Claps no longer wake Vigil.");
     }
 
@@ -315,8 +319,8 @@ public partial class ShellWindow
         }
         else
         {
-            _voice.Stop();
-            Toast("No longer listening for “Hey Vigil”. The microphone is closed.");
+            _voice.Refresh();
+            Toast("No longer listening for “Hey Vigil”. Hold Ctrl+< to talk.");
         }
         RefreshFooter();
     }
@@ -339,8 +343,8 @@ public partial class ShellWindow
         FolderChip.ToolTip = cwd;
 
         var listening = _voice.WakeListening;
-        VoiceChipText.Text = listening ? "Hey Vigil" : "Voice off";
-        VoiceGlyph.Text = listening ? "\uE720" : "\uEC54";
+        VoiceChipText.Text = listening ? "Hey Vigil" : "Hold Ctrl+<";
+        VoiceGlyph.Text = "\uE720";
         VoiceChip.Foreground = listening ? B("Core") : B("TextDim");
         TalkChip.Foreground = _talking ? B("Core") : B("TextDim");
         TalkChipText.Text = _talking ? "Talking" : "Talk";

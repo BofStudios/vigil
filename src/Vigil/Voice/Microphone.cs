@@ -21,6 +21,10 @@ public sealed class Microphone : IDisposable
     double _floor = 120;
     DateTime _lastLoud = DateTime.MinValue;
 
+    /// <summary>Until then, nothing counts as a clap - set while Vigil itself is speaking, so its
+    /// own voice through the speakers can never "clap" it awake.</summary>
+    public DateTime ClapsDeafUntil { get; set; } = DateTime.MinValue;
+
     /// <summary>0..1, roughly how loud the room is right now. For the listening animation.</summary>
     public event Action<float>? Level;
     public event Action<string>? Failed;
@@ -84,7 +88,7 @@ public sealed class Microphone : IDisposable
         if (rms > Threshold * 0.8) _lastLoud = now;
 
         Level?.Invoke((float)Math.Clamp(Math.Log10(1 + rms) / 4.0, 0, 1));
-        if (capture is null) Claps.Feed(data);
+        if (capture is null && now > ClapsDeafUntil) Claps.Feed(data);
         capture?.Feed(data, rms, Threshold);
     }
 
@@ -130,6 +134,53 @@ public sealed class Microphone : IDisposable
         return capture.Heard ? capture.ToWav() : null;
     }
 
+    /// <summary>A recording that runs while a key is held. Release() when it is let go; after a
+    /// mere tap, KeepListening() turns it into "listen until they stop talking".</summary>
+    public sealed class Recording
+    {
+        readonly Capture _capture;
+
+        internal Recording(Capture capture, Task<byte[]?> result)
+        {
+            _capture = capture;
+            Result = result;
+        }
+
+        /// <summary>The WAV once it is over; null if nobody spoke.</summary>
+        public Task<byte[]?> Result { get; }
+
+        public bool Done => Result.IsCompleted;
+
+        public void Release() => _capture.Release();
+
+        public void KeepListening() => _capture.Untether();
+    }
+
+    /// <summary>Starts recording now, until Release() (or KeepListening() and the silence after speech).</summary>
+    public Recording Record(TimeSpan waitAfterTap, CancellationToken ct)
+    {
+        Start();
+        var capture = new Capture(waitAfterTap, false, false) { Held = true };
+        lock (_lock) _capture = capture;
+        return new Recording(capture, Collect(capture, ct));
+    }
+
+    async Task<byte[]?> Collect(Capture capture, CancellationToken ct)
+    {
+        try
+        {
+            await using (ct.Register(() => capture.Done.TrySetCanceled()))
+                await capture.Done.Task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { return null; }
+        finally
+        {
+            lock (_lock)
+                if (_capture == capture) _capture = null;
+        }
+        return capture.Heard ? capture.ToWav() : null;
+    }
+
     /// <summary>Returns once the room has been quiet for a moment, or after `most`. Used right after
     /// Vigil has spoken: the speaker's tail and the room's echo die away before anyone listens.</summary>
     public async Task WaitForQuietAsync(TimeSpan most, CancellationToken ct)
@@ -145,7 +196,7 @@ public sealed class Microphone : IDisposable
     public void Dispose() => Stop();
 
     /// <summary>One utterance being captured: waiting for speech, then for the silence after it.</summary>
-    sealed class Capture(TimeSpan waitForSpeech, bool alreadySpoke, bool conversation)
+    internal sealed class Capture(TimeSpan waitForSpeech, bool alreadySpoke, bool conversation)
     {
         // a conversation wants more than a blip to count as someone speaking: a door, a cough,
         // the last echo of Vigil's own voice are all short
@@ -153,17 +204,33 @@ public sealed class Microphone : IDisposable
         const int WordFrames = 10;                               // ~300 ms of voice in all, for a conversation turn
         readonly TimeSpan EndSilence = TimeSpan.FromMilliseconds(conversation ? 800 : 950);
         static readonly TimeSpan Longest = TimeSpan.FromSeconds(30);
+        static readonly TimeSpan LongestHeld = TimeSpan.FromSeconds(120);
         int _voiced;
 
+        /// <summary>Push to talk: it ends when the key is let go, not at a pause.</summary>
+        public volatile bool Held;
+
+        public void Release() => Done.TrySetResult(true);
+
+        /// <summary>A tap, not a hold: from now on it ends at the silence after speech, and waits
+        /// `waitForSpeech` for that speech to start.</summary>
+        public void Untether()
+        {
+            _started = DateTime.UtcNow;
+            _lastVoice = DateTime.UtcNow;
+            Held = false;
+        }
+
         readonly MemoryStream _audio = new();
-        readonly DateTime _started = DateTime.UtcNow;
+        DateTime _started = DateTime.UtcNow;
         DateTime _lastVoice = DateTime.UtcNow;
         int _loudFrames;
 
         public TaskCompletionSource<bool> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Speaking { get; private set; } = alreadySpoke;
         public bool HeardSpeech { get; private set; } = alreadySpoke;
-        public bool Heard => HeardSpeech && (!conversation || alreadySpoke || _voiced >= WordFrames);
+        readonly bool _spokeFirst = alreadySpoke;
+        public bool Heard => HeardSpeech && (!conversation || _spokeFirst || _voiced >= WordFrames);
 
         public void Preroll(byte[] data) => _audio.Write(data);
 
@@ -186,6 +253,11 @@ public sealed class Microphone : IDisposable
             else if (rms < threshold * 0.75)
                 _loudFrames = 0;
 
+            if (Held)
+            {
+                if (now - _started > LongestHeld) Done.TrySetResult(true);
+                return;
+            }
             if (!HeardSpeech && now - _started > waitForSpeech)
                 Done.TrySetResult(false);
             else if (Speaking && now - _lastVoice > EndSilence)

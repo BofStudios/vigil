@@ -92,8 +92,11 @@ public partial class ShellWindow
         GoTo(Shape.Panel, focus: !talk);
         if (talk)
         {
-            if (!_voice.On) StartVoice(quiet: true);
-            _voice.Summon(greet: false);
+            if (BeginRecording() is { } recording)
+            {
+                recording.KeepListening();
+                _handsFree = true;
+            }
         }
     }
 }

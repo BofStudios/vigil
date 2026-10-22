@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Threading;
 using Vigil.Core;
 using Vigil.Desktop;
@@ -41,6 +41,7 @@ public partial class App : Application
 
         Paths.Ensure();
         var config = Config.Load();
+        if (config.Migrated) { try { config.Save(); } catch (IOException) { } }
         Mind.UseRoot(config.MindFolder);
         try
         {

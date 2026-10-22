@@ -176,11 +176,6 @@ public partial class ShellWindow : IAgentHost
         if (spoken is not null)
         {
             await _voice.Speaker.WhenDoneAsync();
-            if (_talking)
-            {
-                TalkListen();   // the conversation goes on without a word to wake it
-                return;
-            }
             // it closed with a question, so wait a little longer for the answer
             var asked = answer.TrimEnd().EndsWith('?') || answer.TrimEnd().EndsWith('？');
             var window = asked ? Math.Max(_config.FollowUpSeconds, 9) : _config.FollowUpSeconds;
@@ -600,7 +595,7 @@ public partial class ShellWindow : IAgentHost
         AskChoices.Visibility = choices.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         AskCard.Fade(true, 180);
         PlaceholderText.Text = "Type your answer…";
-        PlaceholderHint.Text = _voiceTurn is not null ? "   or just say it" : "";
+        PlaceholderHint.Text = _voiceTurn is not null ? "   or hold Ctrl+< and say it" : "";
         _hiddenByUser = false;
         if (!IsVisible) Show();
         GoTo(Shape.Panel, focus: true);
@@ -609,7 +604,8 @@ public partial class ShellWindow : IAgentHost
         if (_voiceTurn is { } language)
         {
             _voice.Speaker.Feed("\n" + question + "\n");
-            _ = HearAnswer(answer, language);
+            // the answer comes by holding Ctrl+<; it listens by itself only if it was set to follow up
+            if (_config.FollowUpSeconds > 0) _ = HearAnswer(answer, language);
         }
     }
 

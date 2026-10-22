@@ -38,6 +38,29 @@ public partial class ShellWindow
     internal void SetWake(bool on) { if (WakeOn != on) ToggleWake(); }
     internal void SetClaps(bool on) { if (_config.ClapToWake != on) ToggleClaps(); }
     internal bool English => AnswersInEnglish;
+
+    // ----------------------------------------------------------- the voice
+    internal bool ElevenLabsReady => _voice.Speaker.ElevenLabsReady;
+
+    /// <summary>A new ElevenLabs key (empty removes it). Says a line with it, so you hear it worked.</summary>
+    internal void SetElevenLabsKey(string key)
+    {
+        Change(c => c.ElevenLabsApiKey = key.Trim());
+        _voice.Speaker.RetryElevenLabs();
+        if (key.Trim().Length > 0) SayHello();
+        else Toast("ElevenLabs key removed.");
+    }
+
+    internal void SetElevenLabsVoice(string id)
+    {
+        Change(c => c.ElevenLabsVoice = id);
+        _voice.Speaker.RetryElevenLabs();
+        SayHello();
+    }
+
+    internal void SayHello() => _voice.Speaker.Say(Hello(), SpeechLanguage);
+
+    internal void OpenElevenLabsKeys() => OpenUrl(Voice.ElevenLabs.KeysUrl);
     internal void SetEnglish(bool on) { if (AnswersInEnglish != on) ToggleEnglish(); }
     internal void SetApproval(string mode) => SetMode(mode);
     internal void ForgetToday() { Activity.Forget(); Toast("Today's activity is forgotten."); }

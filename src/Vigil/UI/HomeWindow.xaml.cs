@@ -410,10 +410,29 @@ public partial class HomeWindow : Window
         BrainHint.Text = "Groq is free. Gemini, Claude and GPT use your own key; Ollama runs here.";
 
         VoiceSwitches.Children.Clear();
-        VoiceSwitches.Children.Add(Switch("Listen for “Hey Vigil”", "Recognised on this computer.", _shell.WakeOn, _shell.SetWake));
-        VoiceSwitches.Children.Add(Switch("Clap three times to wake", "Three even claps open Vigil and it listens.", c.ClapToWake, _shell.SetClaps));
+        VoiceSwitches.Children.Add(Row("Talk", "Hold Ctrl+< while you speak and let go to send - or tap it, and it listens until you stop. " +
+                                            "The microphone is closed the rest of the time.", new TextBlock { Text = "Ctrl + <", Foreground = B("TextDim") }));
+        VoiceSwitches.Children.Add(Switch("Also listen for “Hey Vigil”", "Keeps Windows' speech recogniser listening all the time.", _shell.WakeOn, _shell.SetWake));
+        VoiceSwitches.Children.Add(Switch("Also wake on three claps", "Keeps the microphone open all the time.", c.ClapToWake, _shell.SetClaps));
         VoiceSwitches.Children.Add(Switch("Answer in English", "Whatever language you speak to it in.", _shell.English, _shell.SetEnglish));
         VoiceSwitches.Children.Add(Switch("Speak answers", "When you asked by voice.", c.SpeakReplies, on => _shell.Change(x => x.SpeakReplies = on)));
+
+        // the voice itself
+        var key = new PasswordBox { Style = (Style)FindResource("SecretBox"), Width = 230 };
+        var saveKey = new Button { Style = (Style)FindResource("Key"), Content = c.ElevenLabsApiKey.Length > 0 ? "Replace" : "Save", Padding = new Thickness(14, 6, 14, 7), Margin = new Thickness(8, 0, 0, 0) };
+        saveKey.Click += (_, _) => { if (key.Password.Trim().Length == 0) return; _shell.SetElevenLabsKey(key.Password); key.Clear(); BuildSettings(); };
+        key.KeyDown += (_, e) => { if (e.Key == Key.Enter && key.Password.Trim().Length > 0) { _shell.SetElevenLabsKey(key.Password); key.Clear(); BuildSettings(); } };
+        VoiceSwitches.Children.Add(Row("ElevenLabs voice",
+            c.ElevenLabsApiKey.Length == 0 ? "The most natural voice, every language. Paste your own key (free allowance each month)."
+            : _shell.ElevenLabsReady ? "On - " + Voice.ElevenLabs.NameOf(c.ElevenLabsVoice) + " is speaking."
+            : "The key did not work - check it, or your monthly allowance. Another voice speaks meanwhile.",
+            new StackPanel { Orientation = Orientation.Horizontal, Children = { key, saveKey } }));
+        VoiceSwitches.Children.Add(ActionRow("Get an ElevenLabs key", "elevenlabs.io › Settings › API keys", "Open", _shell.OpenElevenLabsKeys));
+        if (c.ElevenLabsApiKey.Length > 0)
+            VoiceSwitches.Children.Add(Choice("Which voice", "ElevenLabs' own voices.",
+                Voice.ElevenLabs.Voices.Select(v => (v.Name, (object)v.Id)).ToArray(), c.ElevenLabsVoice,
+                v => _shell.SetElevenLabsVoice((string)v)));
+        VoiceSwitches.Children.Add(ActionRow("Hear it", "Says a line in the voice that will answer you.", "Play", _shell.SayHello));
 
         AwareSwitches.Children.Clear();
         AwareSwitches.Children.Add(Switch("Know which app I'm in", "App names and minutes only - never the screen, titles or typing. Kept in Vigil Mind.",

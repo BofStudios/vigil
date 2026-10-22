@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -91,6 +91,14 @@ public sealed class Speaker : IDisposable
 
     PiperVoice? _piper;
     volatile bool _piperFailed;
+    volatile bool _elevenFailed;
+
+    /// <summary>Try ElevenLabs again - after a new key, say.</summary>
+    public void RetryElevenLabs() => _elevenFailed = false;
+
+    /// <summary>Is ElevenLabs the voice that will speak?</summary>
+    public bool ElevenLabsReady => _config.TtsEngine is "auto" or "elevenlabs" && !_elevenFailed
+                                   && !string.IsNullOrWhiteSpace(_config.ElevenLabsApiKey);
 
     /// <summary>Is the local neural voice in place and in use?</summary>
     public bool LocalVoiceReady => _config.TtsEngine is "auto" or "piper" && !_piperFailed && PiperVoice.Installed(_config.PiperVoice);
@@ -204,8 +212,17 @@ public sealed class Speaker : IDisposable
         lock (_lock) synthesis = _synthesis;
         try { await synthesis.WaitAsync(ct).ConfigureAwait(false); }
         catch (OperationCanceledException) { return; }
+        // never wait for ever: if the device has stopped pulling, "speaking" would never end
+        var giveUp = DateTime.UtcNow + _queue.Remaining + TimeSpan.FromSeconds(3);
         while (Speaking && !ct.IsCancellationRequested)
+        {
+            if (DateTime.UtcNow > giveUp)
+            {
+                Stop();
+                break;
+            }
             await Task.Delay(50, ct).ContinueWith(_ => { }).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Silence, now.</summary>
@@ -259,7 +276,22 @@ public sealed class Speaker : IDisposable
         var code = Code(language);
         var engine = _config.TtsEngine;
 
-        // a neural voice on this computer comes first: nothing leaves the machine, no key, no terms
+        // ElevenLabs, with a key: the most natural voice there is, in every language
+        if (engine is "auto" or "elevenlabs" && !_elevenFailed && !string.IsNullOrWhiteSpace(_config.ElevenLabsApiKey))
+        {
+            try
+            {
+                return await ElevenLabs.SpeakAsync(_config.ElevenLabsApiKey, _config.ElevenLabsVoice, _config.ElevenLabsModel, text, ct)
+                                       .ConfigureAwait(false);
+            }
+            catch (ProviderException ex)
+            {
+                _elevenFailed = true;   // a bad key or an empty allowance: the next voice takes over, and it is said once
+                Failed?.Invoke(ex.Message + " - another voice is speaking for now.");
+            }
+        }
+
+        // a neural voice on this computer: nothing leaves the machine, no key, no terms
         if (engine is "auto" or "piper" && !_piperFailed && PiperVoice.Model(_config.PiperVoice) is { } piperModel
             && PiperVoice.LanguageOf(piperModel) == code && PiperVoice.Exe() is not null)
         {
@@ -323,9 +355,11 @@ public sealed class Speaker : IDisposable
         try
         {
             var reader = new WaveFileReader(new MemoryStream(wav));
+            var seconds = reader.TotalTime.TotalSeconds;
             clip = reader.ToSampleProvider();
             if (clip.WaveFormat.Channels == 2) clip = new StereoToMonoSampleProvider(clip);
             if (clip.WaveFormat.SampleRate != OutputRate) clip = new WdlResamplingSampleProvider(clip, OutputRate);
+            clip = new Measured(clip, (long)(seconds * OutputRate));
         }
         catch (Exception ex) when (ex is FormatException or InvalidDataException or ArgumentException)
         {
@@ -362,9 +396,20 @@ public sealed class Speaker : IDisposable
             if (_output is not null) return;
             try
             {
-                _output = new WaveOutEvent { DesiredLatency = 120, NumberOfBuffers = 3 };
-                _output.Init(_queue);
-                _output.Play();
+                var output = new WaveOutEvent { DesiredLatency = 160, NumberOfBuffers = 4 };
+                output.PlaybackStopped += (_, e) =>
+                {
+                    // the device went away or the stream failed: drop it, so the next sentence opens a fresh one
+                    lock (_lock)
+                        if (_output == output) _output = null;
+                    try { output.Dispose(); } catch (Exception) { }
+                    _queue.Clear();
+                    SetSpeaking(false);
+                    if (e.Exception is not null) Failed?.Invoke("The speaker stopped: " + e.Exception.Message);
+                };
+                output.Init(_queue);
+                output.Play();
+                _output = output;
             }
             catch (Exception ex) when (ex is NAudio.MmException or InvalidOperationException)
             {
@@ -398,7 +443,7 @@ public sealed class Speaker : IDisposable
     // ---------------------------------------------------------- playback
     /// <summary>Plays clips one after another, forever, and silence in between.
     /// One device stream for the whole session means no pop at the start of a sentence.</summary>
-    sealed class ClipQueue(WaveFormat format) : ISampleProvider
+    internal sealed class ClipQueue(WaveFormat format) : ISampleProvider
     {
         readonly ConcurrentQueue<ISampleProvider> _clips = new();
         ISampleProvider? _current;
@@ -409,12 +454,26 @@ public sealed class Speaker : IDisposable
         public event Action<float>? Level;
         public event Action? Drained;
 
-        public void Add(ISampleProvider clip) => _clips.Enqueue(clip);
+        long _queuedSamples, _playedSamples;
+
+        /// <summary>Roughly how long until everything queued has been played.</summary>
+        public TimeSpan Remaining => TimeSpan.FromSeconds(Math.Max(0, Interlocked.Read(ref _queuedSamples) - Interlocked.Read(ref _playedSamples))
+                                                          / (double)WaveFormat.SampleRate);
+
+        public void Add(ISampleProvider clip)
+        {
+            // a clip whose length is known counts towards Remaining; others count as ten seconds
+            var samples = clip is ISampleLength known ? known.Samples : WaveFormat.SampleRate * 10L;
+            Interlocked.Add(ref _queuedSamples, samples);
+            _clips.Enqueue(clip);
+        }
 
         public void Clear()
         {
             while (_clips.TryDequeue(out _)) { }
             _current = null;
+            Interlocked.Exchange(ref _queuedSamples, 0);
+            Interlocked.Exchange(ref _playedSamples, 0);
         }
 
         public int Read(float[] buffer, int offset, int count)
@@ -433,6 +492,7 @@ public sealed class Speaker : IDisposable
                 written += read;
             }
             if (written < count) Array.Clear(buffer, offset + written, count - written);
+            Interlocked.Add(ref _playedSamples, written);
 
             float peak = 0;
             for (var i = 0; i < written; i++) peak = Math.Max(peak, Math.Abs(buffer[offset + i]));
@@ -449,8 +509,23 @@ public sealed class Speaker : IDisposable
         }
     }
 
-    sealed class FloatClip(float[] samples, WaveFormat format) : ISampleProvider
+    /// <summary>A clip that knows how long it is.</summary>
+    interface ISampleLength
     {
+        long Samples { get; }
+    }
+
+    /// <summary>Wraps a clip with its length, so the queue can tell how long is left.</summary>
+    sealed class Measured(ISampleProvider inner, long samples) : ISampleProvider, ISampleLength
+    {
+        public long Samples => samples;
+        public WaveFormat WaveFormat => inner.WaveFormat;
+        public int Read(float[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+    }
+
+    sealed class FloatClip(float[] samples, WaveFormat format) : ISampleProvider, ISampleLength
+    {
+        public long Samples => samples.Length;
         int _position;
         public WaveFormat WaveFormat { get; } = format;
 

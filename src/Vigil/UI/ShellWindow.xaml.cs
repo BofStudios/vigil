@@ -122,7 +122,7 @@ public partial class ShellWindow : Window
     const int TalkKeyId = 0x5650;
     const uint VkOem102 = 0xE2;
 
-    /// <summary>Ctrl+&lt;: come forward and listen. Pressed again while listening, it stops.</summary>
+    /// <summary>Ctrl+&lt;: come forward and listen while it is held (or, after a tap, until you stop talking).</summary>
     void TalkKey()
     {
         if (!_config.IsReady)
@@ -135,8 +135,7 @@ public partial class ShellWindow : Window
         if (_yielded) { _yielded = false; Topmost = true; }
         if (!IsVisible) Show();
         if (_shape == Shape.Pill) GoTo(Shape.Bar);
-        if (!_voice.On) StartVoice(quiet: true);
-        _voice.Summon(greet: false);
+        PressedTalkKey();
     }
 
     /// <summary>Top centre of the primary monitor's work area, where the bar always lived.</summary>
@@ -152,7 +151,7 @@ public partial class ShellWindow : Window
         _watch.Start();
         if (_hiddenByUser) Hide();
         ShowFirstRun();
-        // the microphone stays open for "Hey Vigil" and for three claps
+        // only "Hey Vigil" or three claps keep anything listening; otherwise the microphone opens while Ctrl+< is held
         if (_config.EnableVoice && (_config.WakeWord || _config.ClapToWake))
             StartVoice(quiet: true);
         RefreshFooter();
@@ -326,6 +325,12 @@ public partial class ShellWindow : Window
 
     void OnKey(object sender, KeyEventArgs e)
     {
+        // the talk key held down repeats; none of it should land in the box as "<<<<"
+        if (e.Key == Key.OemBackslash && (_recording is { Done: false } || _holdWatch.IsEnabled))
+        {
+            e.Handled = true;
+            return;
+        }
         if (_approvalPending)
         {
             OnApprovalKey(e);
@@ -335,8 +340,9 @@ public partial class ShellWindow : Window
         {
             e.Handled = true;
             if (_voice.Speaker.Speaking) { _voice.Speaker.Stop(); return; }
+            if (_recording is { Done: false } open) { open.Release(); _voice.CancelListening(); return; }
+            if (_voice.Listening) { _voice.CancelListening(); return; }
             if (_talking) { EndTalk(); return; }   // Esc while talking: that's all
-            if (_voice.State is VoiceState.Listening) { _voice.ListenNow(); return; }
             if (_askPending) { AnswerAsk(null); return; }
             if (_shape == Shape.Panel) { GoTo(Shape.Bar, focus: true); return; }
             if (_shape == Shape.Bar)

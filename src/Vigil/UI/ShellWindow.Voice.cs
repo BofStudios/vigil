@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Vigil.Core;
+using Vigil.Desktop;
 using Vigil.Voice;
 
 namespace Vigil.UI;
@@ -31,6 +32,7 @@ public partial class ShellWindow
         _voice.Heard += heard => Dispatcher.BeginInvoke(() => OnHeard(heard));
         _voice.Problem += problem => Dispatcher.BeginInvoke(() => OnVoiceProblem(problem));
         _levelTimer.Tick += (_, _) => AnimateLevels();
+        _holdWatch.Tick += (_, _) => WatchHold();
     }
 
     void StartVoice(bool quiet)
@@ -39,10 +41,11 @@ public partial class ShellWindow
         if (!_voice.Start()) return;
         App.Note("voice on: wake phrase " + (_voice.WakeListening ? "listening" : "off") + ", claps " + (_config.ClapToWake ? "on" : "off"));
         if (!quiet)
-            Toast(_voice.WakeListening ? "Listening for “Hey Vigil”." : "Microphone on. Click the mic to talk.");
+            Toast(_voice.WakeListening ? "Listening for “Hey Vigil”." : "Hold Ctrl+< and talk.");
         RefreshFooter();
     }
 
+    /// <summary>The mic button: listen now, until you stop talking. Clicked while it listens, it stops.</summary>
     void ToggleListening()
     {
         if (!_config.EnableVoice)
@@ -56,13 +59,76 @@ public partial class ShellWindow
             return;
         }
         if (_shape == Shape.Pill) GoTo(Shape.Bar);
-        if (_talking)
+        if (_recording is { Done: false } open)
         {
-            EndTalk("Alright, I'll be here.");   // the mic button while talking: that's all
+            open.Release();
             return;
         }
-        // it answers the press with a word, then listens
-        _voice.Summon(greet: _config.GreetOnSummon);
+        if (_voice.Listening)
+        {
+            _voice.CancelListening();
+            return;
+        }
+        if (BeginRecording() is { } recording)
+        {
+            recording.KeepListening();
+            _handsFree = true;
+            ShowVoiceState(_voice.State);
+        }
+    }
+
+    // ============================================================= push to talk
+    // Hold Ctrl+< and talk; let go and it is written into the bar and sent. A quick tap instead
+    // listens until you stop talking. Pressing it while Vigil speaks cuts it off - that is how you
+    // interrupt. The microphone is open only for this: nothing listens in between.
+    Microphone.Recording? _recording;
+    bool _handsFree;
+    DateTime _pressed;
+    readonly DispatcherTimer _holdWatch = new() { Interval = TimeSpan.FromMilliseconds(30) };
+    static readonly TimeSpan TapLongest = TimeSpan.FromMilliseconds(350);
+
+    Microphone.Recording? BeginRecording()
+    {
+        if (!_voice.On) StartVoice(quiet: true);
+        var recording = _voice.PressToTalk();
+        if (recording is null) return null;
+        _recording = recording;
+        _handsFree = false;
+        _ = recording.Result.ContinueWith(_ => Dispatcher.BeginInvoke(() =>
+        {
+            if (_recording == recording) _recording = null;
+            ShowVoiceState(_voice.State);
+        }), TaskScheduler.Default);
+        return recording;
+    }
+
+    /// <summary>Ctrl+&lt; went down.</summary>
+    void PressedTalkKey()
+    {
+        if (_recording is { Done: false } open)
+        {
+            open.Release();   // a second press ends a tap-started listen
+            return;
+        }
+        if (BeginRecording() is null) return;
+        _pressed = DateTime.UtcNow;
+        _holdWatch.Start();
+        ShowVoiceState(_voice.State);
+    }
+
+    /// <summary>Watches for the key coming back up: RegisterHotKey only reports it going down.</summary>
+    void WatchHold()
+    {
+        if ((Native.GetAsyncKeyState((int)VkOem102) & 0x8000) != 0) return;   // still held
+        _holdWatch.Stop();
+        if (_recording is not { Done: false } recording) return;
+        if (DateTime.UtcNow - _pressed < TapLongest)
+        {
+            recording.KeepListening();   // a tap: listen until they stop talking
+            _handsFree = true;
+            ShowVoiceState(_voice.State);
+        }
+        else recording.Release();       // a hold: what was said while holding is the message
     }
 
     void OnWoken()
@@ -99,12 +165,10 @@ public partial class ShellWindow
     }
 
     // ================================================================ talk mode
-    // A conversation, not a series of commands: it listens, answers out loud, and listens
-    // again - no wake phrase, no button - until you say "that's all", press Esc or the mic.
+    // A spoken conversation: every answer is said out loud, even a typed question. You talk by
+    // holding Ctrl+<, and pressing it while Vigil speaks interrupts it. It never opens the
+    // microphone on its own, so it cannot hear itself.
     bool _talking;
-    bool _talkListening;
-    int _quietRounds;
-    readonly Queue<DateTime> _turns = new();
 
     internal bool Talking => _talking;
 
@@ -127,28 +191,19 @@ public partial class ShellWindow
             Summon();
             return;
         }
-        if (!_voice.On && !_voice.Start()) return;
+        if (!_voice.On) StartVoice(quiet: true);
         _talking = true;
-        _quietRounds = 0;
-        _turns.Clear();
-        if (Busy) _agent?.Stop();
         OnWoken();
         RefreshFooter();
         ShowVoiceState(_voice.State);
         Journal("talk mode", "started");
-        _voice.Speaker.Say("Talk mode. I'm listening - just talk, and say that's all when you're done.", "en");
-        _ = Task.Run(async () =>
-        {
-            await _voice.Speaker.WhenDoneAsync().ConfigureAwait(false);
-            await Dispatcher.BeginInvoke(TalkListen);
-        });
+        _voice.Speaker.Say("Talk mode. Hold Control and the less-than key while you talk, and let go when you're done.", "en");
     }
 
     internal void EndTalk(string? say = null)
     {
         if (!_talking) return;
         _talking = false;
-        _voice.CancelListening();
         Journal("talk mode", "ended");
         if (say is not null && _voice.On) _voice.Speaker.Say(say, "en");
         RefreshFooter();
@@ -158,57 +213,6 @@ public partial class ShellWindow
     void Journal(string kind, string text)
     {
         if (_config.Journal) Mind.Journal(kind, text);
-    }
-
-    /// <summary>Listens for the next thing said, hands it on, and - if it was only a
-    /// stop word - listens again. Once it is answering, the end of that answer calls this.</summary>
-    async void TalkListen()
-    {
-        if (!_talking || _talkListening) return;
-        _talkListening = true;
-        try
-        {
-            while (_talking && !Busy && !_askPending && !_approvalPending)
-            {
-                var began = DateTime.UtcNow;
-                await Task.Delay(250);
-                if (!_talking || Busy) break;
-                // conversation: it waits for the room to go quiet first, and wants more than a blip
-                var heard = await _voice.ListenAsync(TimeSpan.FromSeconds(25), null, false, chime: false, conversation: true);
-                if (!_talking) break;
-                if (heard is null)
-                {
-                    // nothing for a while: a few quiet rounds and it lets go, rather than listening all night
-                    if (DateTime.UtcNow - began < TimeSpan.FromSeconds(2)) await Task.Delay(1500);   // no hot loop if the mic is busy
-                    if (++_quietRounds >= 3)
-                    {
-                        EndTalk("It's gone quiet, so I'll stop listening. Just say Hey Vigil when you want me.");
-                        break;
-                    }
-                    continue;
-                }
-                _quietRounds = 0;
-                App.Note("talk: heard (" + heard.Language + ") " + heard.Text);
-
-                // the brake: several turns in a few seconds is not a conversation, it is Vigil
-                // listening to itself (speakers and a microphone in one room)
-                var now = DateTime.UtcNow;
-                _turns.Enqueue(now);
-                while (_turns.Count > 0 && now - _turns.Peek() > TimeSpan.FromSeconds(25)) _turns.Dequeue();
-                if (_turns.Count >= 4)
-                {
-                    App.Note("talk: stopped, " + _turns.Count + " turns in 25 s");
-                    _voice.Speaker.Stop();
-                    EndTalk();
-                    Toast("Talk mode stopped: it kept hearing itself. Headphones fix that - or lower the volume and try again.", B("Moderate"));
-                    break;
-                }
-
-                OnHeard(heard);
-                if (Busy) break;   // it is answering; when it has finished, the answer calls this again
-            }
-        }
-        finally { _talkListening = false; }
     }
 
     async void FollowUp(string language, double seconds)
@@ -339,9 +343,11 @@ public partial class ShellWindow
         Placeholder.Visibility = showing || Input.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
         VoiceText.Text = state switch
         {
-            VoiceState.Listening => _talking ? "Listening…   ·   talk mode" : "Listening…",
+            VoiceState.Listening => _recording is { Done: false } && !_handsFree ? "Listening…   ·   let go to send"
+                                  : _recording is { Done: false } ? "Listening…   ·   Ctrl+< to stop"
+                                  : _talking ? "Listening…   ·   talk mode" : "Listening…",
             VoiceState.Hearing => "Understanding…",
-            VoiceState.Speaking => "Speaking   ·   Esc to stop",
+            VoiceState.Speaking => "Speaking   ·   Esc to stop, or hold Ctrl+< to answer",
             _ => "",
         };
         Pulse(state == VoiceState.Listening);
