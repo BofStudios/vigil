@@ -333,6 +333,23 @@ public partial class ShellWindow
     bool IsShown => (IsVisible || _preview) && _shape != Shape.Pill;
 
     VoiceState _shownState = VoiceState.Off;
+    TalkPill? _pill;
+
+    /// <summary>The pill at the bottom of the screen: your voice as a waveform while it listens.</summary>
+    void ShowPill(VoiceState state)
+    {
+        if (_preview) return;
+        if (state == VoiceState.Listening && !_yielded)
+        {
+            _pill ??= new TalkPill(this);
+            _pill.Listen(() => _micLevel,
+                _recording is { Done: false } && !_handsFree ? "Listening  ·  let go to send"
+                : _recording is { Done: false } ? "Listening  ·  Ctrl+< to stop"
+                : "Listening…");
+        }
+        else if (state == VoiceState.Hearing) _pill?.Hearing();
+        else _pill?.Away();
+    }
 
     void ShowVoiceState(VoiceState state)
     {
@@ -351,6 +368,7 @@ public partial class ShellWindow
             _ => "",
         };
         Pulse(state == VoiceState.Listening);
+        ShowPill(state);
         Breathe();
         if (state == VoiceState.Listening && _shape == Shape.Pill && !_yielded) GoTo(Shape.Bar);
         UpdateTray();

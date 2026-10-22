@@ -89,6 +89,34 @@ public partial class ShellWindow
         HideSetup();
 
         new HomeWindow(this).RenderPages(folder);
+
+        // the talk pill, with a made-up voice: a few words, a pause, a few more
+        var pill = new TalkPill(this);
+        var levels = new[] { 0.5f, 0.82f, 0.9f, 0.7f, 0.86f, 0.55f, 0.5f, 0.78f, 0.92f, 0.88f, 0.6f, 0.84f, 0.9f, 0.75f, 0.83f, 0.6f };
+        ShotOf(pill.RenderFrame(levels, "Listening  ·  let go to send", false), folder, "8-talk-pill");
+        ShotOf(pill.RenderFrame(levels, "Understanding…", true), folder, "8b-talk-pill-hearing");
+        pill.Close();
+    }
+
+    static void ShotOf(FrameworkElement element, string folder, string name)
+    {
+        element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var size = element.DesiredSize;
+        element.Arrange(new Rect(size));
+        element.UpdateLayout();
+        const double scale = 2;
+        var bitmap = new RenderTargetBitmap((int)(size.Width * scale), (int)(size.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x2B, 0x33, 0x40), Color.FromRgb(0x5A, 0x4E, 0x46), 35), null, new Rect(size));
+            dc.DrawRectangle(new VisualBrush(element), null, new Rect(size));
+        }
+        bitmap.Render(visual);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var file = File.Create(Path.Combine(folder, name + ".png"));
+        encoder.Save(file);
     }
 
     /// <summary>VIGIL_PREVIEW_DEMO=1: a made-up day in a throwaway Vigil Mind, so pictures

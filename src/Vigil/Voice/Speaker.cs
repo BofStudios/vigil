@@ -25,7 +25,7 @@ public sealed class Speaker : IDisposable
     readonly Config _config;
     readonly ClipQueue _queue = new(WaveFormat.CreateIeeeFloatWaveFormat(OutputRate, 1));
     readonly object _lock = new();
-    WaveOutEvent? _output;
+    IWavePlayer? _output;
     Channel<string>? _sentences;
     SentenceSplitter _splitter = new();
     CancellationTokenSource _cancel = new();
@@ -271,7 +271,7 @@ public sealed class Speaker : IDisposable
 
     /// <summary>The most natural voice available for this language: Groq's for English on the
     /// free key, OpenAI's for everything when there is a key for it, and Windows' own otherwise.</summary>
-    async Task<byte[]> SynthesiseAsync(string text, string language, CancellationToken ct)
+    internal async Task<byte[]> SynthesiseAsync(string text, string language, CancellationToken ct)
     {
         var code = Code(language);
         var engine = _config.TtsEngine;
@@ -349,6 +349,24 @@ public sealed class Speaker : IDisposable
         return buffer.ToArray();
     }
 
+    internal static ISampleProvider? Decode(byte[] wav, Action<string>? failed = null)
+    {
+        try
+        {
+            var reader = new WaveFileReader(new MemoryStream(wav));
+            var seconds = reader.TotalTime.TotalSeconds;
+            ISampleProvider clip = reader.ToSampleProvider();
+            if (clip.WaveFormat.Channels == 2) clip = new StereoToMonoSampleProvider(clip);
+            if (clip.WaveFormat.SampleRate != OutputRate) clip = new WdlResamplingSampleProvider(clip, OutputRate);
+            return new Measured(clip, (long)(seconds * OutputRate));
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidDataException or ArgumentException)
+        {
+            failed?.Invoke("Could not play the voice: " + ex.Message);
+            return null;
+        }
+    }
+
     void Enqueue(byte[] wav)
     {
         ISampleProvider clip;
@@ -396,13 +414,16 @@ public sealed class Speaker : IDisposable
             if (_output is not null) return;
             try
             {
-                var output = new WaveOutEvent { DesiredLatency = 160, NumberOfBuffers = 4 };
+                // WASAPI, not the old waveOut: on some sound cards waveOut keeps replaying its last few hundred
+                // milliseconds after the sentence ends - the last syllable, over and over, measured on this PC
+                var output = new WasapiOut(NAudio.CoreAudioApi.AudioClientShareMode.Shared, true, 80);
                 output.PlaybackStopped += (_, e) =>
                 {
-                    // the device went away or the stream failed: drop it, so the next sentence opens a fresh one
-                    lock (_lock)
-                        if (_output == output) _output = null;
-                    try { output.Dispose(); } catch (Exception) { }
+                    // the device went away or the stream failed: drop it, so the next sentence opens a fresh one.
+                    // This runs on the playback thread itself - no lock here, and no disposing it from inside
+                    // its own thread: either would wait for ever on the one doing the stopping.
+                    if (Interlocked.CompareExchange(ref _output, null, output) != output) return;   // stopped on purpose
+                    _ = Task.Run(() => { try { output.Dispose(); } catch (Exception) { } });
                     _queue.Clear();
                     SetSpeaking(false);
                     if (e.Exception is not null) Failed?.Invoke("The speaker stopped: " + e.Exception.Message);
@@ -411,7 +432,7 @@ public sealed class Speaker : IDisposable
                 output.Play();
                 _output = output;
             }
-            catch (Exception ex) when (ex is NAudio.MmException or InvalidOperationException)
+            catch (Exception ex) when (ex is NAudio.MmException or InvalidOperationException or System.Runtime.InteropServices.COMException)
             {
                 _output?.Dispose();
                 _output = null;
@@ -432,12 +453,14 @@ public sealed class Speaker : IDisposable
     {
         Stop();
         _piper?.Dispose();
-        lock (_lock)
+        // taken out first and stopped outside the lock: stopping waits for the playback thread
+        var output = Interlocked.Exchange(ref _output, null);
+        try
         {
-            _output?.Stop();
-            _output?.Dispose();
-            _output = null;
+            output?.Stop();
+            output?.Dispose();
         }
+        catch (Exception) { }
     }
 
     // ---------------------------------------------------------- playback
