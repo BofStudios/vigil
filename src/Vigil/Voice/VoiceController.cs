@@ -31,6 +31,9 @@ public sealed class VoiceController : IDisposable
     /// <summary>A spoken request, ready for the agent.</summary>
     public event Action<Utterance>? Heard;
     public event Action<string>? Problem;
+    /// <summary>The words so far, while the person is still talking - each one replaces the last,
+    /// and later words can change earlier ones. Not the final text: that comes through Heard.</summary>
+    public event Action<string>? Partial;
 
     public VoiceState State
     {
@@ -211,7 +214,52 @@ public sealed class VoiceController : IDisposable
         var recording = Mic.Record(TimeSpan.FromSeconds(7), _listen.Token);
         State = VoiceState.Listening;
         _ = FinishAsync(recording, ears, _listen.Token);
+        _ = LiveAsync(recording, ears, _listen.Token);
         return recording;
+    }
+
+    // Groq's free Whisper allows 20 requests a minute. Live words use what is spare and always leave
+    // room for the final one - the one that matters.
+    static readonly Queue<DateTime> WhisperCalls = new();
+    const int WhisperPerMinute = 20, KeepForFinals = 5;
+
+    static bool MayTranscribe(bool final)
+    {
+        lock (WhisperCalls)
+        {
+            var now = DateTime.UtcNow;
+            while (WhisperCalls.Count > 0 && now - WhisperCalls.Peek() > TimeSpan.FromSeconds(60)) WhisperCalls.Dequeue();
+            if (WhisperCalls.Count >= (final ? WhisperPerMinute : WhisperPerMinute - KeepForFinals)) return final;
+            WhisperCalls.Enqueue(now);
+            return true;
+        }
+    }
+
+    /// <summary>While the key is held: every second or so, the whole of what has been said so far is
+    /// turned into words again, so the text grows as you talk and corrects itself as more context comes.</summary>
+    async Task LiveAsync(Microphone.Recording recording, ITranscriber ears, CancellationToken ct)
+    {
+        var lastSeconds = 0.0;
+        try
+        {
+            while (!recording.Done)
+            {
+                await Task.Delay(700, ct).ConfigureAwait(false);
+                if (recording.Done) break;
+                var seconds = recording.Seconds;
+                if (seconds < 0.8 || seconds - lastSeconds < 0.6) continue;   // nothing new worth asking about
+                if (recording.SoFar() is not { } wav) continue;               // nobody has spoken yet
+                if (!MayTranscribe(final: false)) continue;
+                lastSeconds = seconds;
+                Transcript partial;
+                try { partial = await ears.TranscribeAsync(wav, _config.VoiceLanguage, ct).ConfigureAwait(false); }
+                catch (ProviderException) { break; }   // rate limit or a hiccup: the final one still comes
+                if (recording.Done) break;              // the final one is on its way: no older guess over it
+                var text = SpeechText.StripWake(partial.Text).Trim();
+                if (text.Length > 0 && !SpeechText.IsNoise(text)) Partial?.Invoke(text);
+            }
+        }
+        catch (OperationCanceledException) { }
     }
 
     async Task FinishAsync(Microphone.Recording recording, ITranscriber ears, CancellationToken ct)
@@ -283,6 +331,7 @@ public sealed class VoiceController : IDisposable
     async Task<Utterance?> TranscribeAsync(byte[] wav, ITranscriber ears, CancellationToken ct)
     {
         State = VoiceState.Hearing;
+        MayTranscribe(final: true);
         Transcript transcript;
         try { transcript = await ears.TranscribeAsync(wav, _config.VoiceLanguage, ct).ConfigureAwait(false); }
         catch (OperationCanceledException) { State = VoiceState.Idle; return null; }

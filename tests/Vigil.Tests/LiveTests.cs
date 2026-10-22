@@ -16,12 +16,13 @@ public class LiveTests
     {
         public readonly StringBuilder Streamed = new();
         public readonly List<string> Tools = new();
+        public readonly List<string> Summaries = new();
         public readonly List<string> Errors = new();
         public int Asked;
 
         public void StreamText(string chunk) { lock (Streamed) Streamed.Append(chunk); }
         public void EndStream() { }
-        public void ToolStarted(string tool, string summary, Risk risk) => Tools.Add(tool);
+        public void ToolStarted(string tool, string summary, Risk risk) { Tools.Add(tool); Summaries.Add(summary); }
         public void ToolFinished(string tool, string output, bool ok) { }
         public void Note(string text) { }
         public void Warn(string text) => Errors.Add(text);
@@ -129,6 +130,32 @@ public class LiveTests
             Mind.UseRoot("");
             try { Directory.Delete(root, true); } catch (IOException) { }
         }
+    }
+
+    [Fact]
+    public async Task A_half_remembered_song_is_worked_out_and_played()
+    {
+        if (!Live) return;
+        var config = Config.Load();
+        config.ApprovalMode = "ask";   // the play is asked about - and declined - so nothing opens during the test
+        var host = new Host();
+        var agent = new Agent(config, ProviderFactory.Build(config), Registry.Build(config), host);
+
+        await agent.RunAsync("Madonna'dan prayer şarkısını aç", spokenLanguage: "turkish");
+
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "vigil-live-play.txt"), string.Join("\n", host.Summaries));
+        Assert.Contains("play", host.Tools);
+        Assert.Contains(host.Summaries, s => s.Contains("Like a Prayer", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task YouTube_finds_the_song()
+    {
+        if (!Live) return;
+        var found = await MediaTools.FindAsync("Madonna Like a Prayer", CancellationToken.None);
+        Assert.NotNull(found);
+        Assert.Equal(11, found!.Value.Id.Length);
+        Assert.Contains("Prayer", found.Value.Title, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

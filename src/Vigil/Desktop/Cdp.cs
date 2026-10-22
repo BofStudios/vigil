@@ -23,28 +23,57 @@ internal sealed class Cdp : IDisposable
 
     public int Port { get; private set; }
 
+    static readonly (string Key, string Path)[] Browsers =
+    {
+        ("chrome", @"Google\Chrome\Application\chrome.exe"),
+        ("edge", @"Microsoft\Edge\Application\msedge.exe"),
+        ("brave", @"BraveSoftware\Brave-Browser\Application\brave.exe"),
+    };
+
+    /// <summary>The browser the person uses: the Windows default if it is one Vigil can drive, then
+    /// Chrome, Edge, Brave - whichever is installed. Always with Vigil's own profile, never theirs.</summary>
     public static string? FindBrowser()
     {
-        var programFiles = new[]
+        var roots = new[]
         {
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         };
-        var candidates = programFiles.SelectMany(root => new[]
-        {
-            Path.Combine(root, @"Microsoft\Edge\Application\msedge.exe"),
-            Path.Combine(root, @"Google\Chrome\Application\chrome.exe"),
-            Path.Combine(root, @"BraveSoftware\Brave-Browser\Application\brave.exe"),
-        });
-        return candidates.FirstOrDefault(File.Exists);
+        string? Installed(string key) => Browsers.Where(b => b.Key == key)
+            .SelectMany(b => roots.Select(r => Path.Combine(r, b.Path))).FirstOrDefault(File.Exists);
+
+        var preferred = DefaultBrowser();
+        return (preferred is null ? null : Installed(preferred)) ?? Browsers.Select(b => Installed(b.Key)).FirstOrDefault(p => p is not null);
     }
+
+    /// <summary>"chrome", "edge" or "brave" from the Windows default for web links; null for anything else.</summary>
+    public static string? DefaultBrowser()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice");
+            var progId = key?.GetValue("ProgId") as string ?? "";
+            return progId.StartsWith("ChromeHTML", StringComparison.OrdinalIgnoreCase) ? "chrome"
+                 : progId.StartsWith("MSEdge", StringComparison.OrdinalIgnoreCase) ? "edge"
+                 : progId.StartsWith("BraveHTML", StringComparison.OrdinalIgnoreCase) ? "brave"
+                 : null;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return null; }
+    }
+
+    /// <summary>A profile per browser: one browser cannot open another's profile folder.</summary>
+    static string ProfileFor(string browser) =>
+        browser.EndsWith("msedge.exe", StringComparison.OrdinalIgnoreCase)
+            ? Paths.BrowserProfile   // where it always was
+            : Paths.BrowserProfile + "-" + Path.GetFileNameWithoutExtension(browser).ToLowerInvariant();
 
     public static async Task<Cdp> StartAsync(CancellationToken ct)
     {
-        var browser = FindBrowser() ?? throw new InvalidOperationException("No Edge or Chrome was found on this computer.");
-        Directory.CreateDirectory(Paths.BrowserProfile);
-        var portFile = Path.Combine(Paths.BrowserProfile, "DevToolsActivePort");
+        var browser = FindBrowser() ?? throw new InvalidOperationException("No Chrome, Edge or Brave was found on this computer.");
+        var profile = ProfileFor(browser);
+        Directory.CreateDirectory(profile);
+        var portFile = Path.Combine(profile, "DevToolsActivePort");
 
         var cdp = new Cdp();
         // a browser left open from earlier is reused rather than fought with
@@ -56,7 +85,7 @@ internal sealed class Cdp : IDisposable
             foreach (var arg in new[]
                      {
                          "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1",
-                         "--user-data-dir=" + Paths.BrowserProfile, "--no-first-run", "--no-default-browser-check",
+                         "--user-data-dir=" + profile, "--no-first-run", "--no-default-browser-check",
                          "--disable-features=msEdgeSidebarV2,msUndersideButton", "--new-window", "about:blank",
                      })
                 start.ArgumentList.Add(arg);

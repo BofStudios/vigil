@@ -31,6 +31,7 @@ public partial class ShellWindow
         _voice.Woken += () => Dispatcher.BeginInvoke(OnWoken);
         _voice.Heard += heard => Dispatcher.BeginInvoke(() => OnHeard(heard));
         _voice.Problem += problem => Dispatcher.BeginInvoke(() => OnVoiceProblem(problem));
+        _voice.Partial += words => Dispatcher.BeginInvoke(() => ShowLiveWords(words));
         _levelTimer.Tick += (_, _) => AnimateLevels();
         _holdWatch.Tick += (_, _) => WatchHold();
     }
@@ -334,6 +335,14 @@ public partial class ShellWindow
 
     VoiceState _shownState = VoiceState.Off;
     TalkPill? _pill;
+
+    /// <summary>What you are saying, as you say it - in the pill and in the bar.</summary>
+    void ShowLiveWords(string words)
+    {
+        if (_voice.State is not (VoiceState.Listening or VoiceState.Hearing)) return;   // already sent
+        _pill?.Words(words);
+        VoiceText.Text = words.Length > 64 ? "…" + words[^63..] : words;
+    }
 
     /// <summary>The pill at the bottom of the screen: your voice as a waveform while it listens.</summary>
     void ShowPill(VoiceState state)

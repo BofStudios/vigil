@@ -23,6 +23,11 @@ public sealed class Agent : IDisposable
         "Shall I build the logic for that?", "Want me to automate it so it runs every morning?", "Shall I draft a
         plan first?", "Should I keep an eye on it and tell you when it's done?" - never a generic "how can I help?".
 
+        UNDERSTAND: requests are often spoken, half-remembered, in any language, and sometimes mis-heard. Work out what
+        the user most likely means from what you know, then act on that and say it in a few words: "Madonna'dan prayer
+        şarkısını aç" means play Madonna - Like a Prayer; "the video editing thing" is the editor they have installed.
+        Fix obvious mis-hearings. Ask only when two readings are equally likely. Music or videos: use play.
+
         WORK: never guess what a tool can tell you. Act, then check. If a tool fails, change approach - never repeat
         the same call. Unsure, or the choice is theirs? Use ask_user. Finish with a short summary.
 

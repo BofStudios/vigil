@@ -154,6 +154,12 @@ public sealed class Microphone : IDisposable
         public void Release() => _capture.Release();
 
         public void KeepListening() => _capture.Untether();
+
+        /// <summary>How much has been recorded so far.</summary>
+        public double Seconds => _capture.Seconds;
+
+        /// <summary>What has been said so far, as a WAV - for the live words while still talking. Null before any speech.</summary>
+        public byte[]? SoFar() => _capture.HeardSpeech ? _capture.ToWav() : null;
     }
 
     /// <summary>Starts recording now, until Release() (or KeepListening() and the silence after speech).</summary>
@@ -232,12 +238,14 @@ public sealed class Microphone : IDisposable
         readonly bool _spokeFirst = alreadySpoke;
         public bool Heard => HeardSpeech && (!conversation || _spokeFirst || _voiced >= WordFrames);
 
-        public void Preroll(byte[] data) => _audio.Write(data);
+        public void Preroll(byte[] data) { lock (_audio) _audio.Write(data); }
+
+        public double Seconds { get { lock (_audio) return _audio.Length / (double)(Rate * 2); } }
 
         public void Feed(byte[] data, double rms, double threshold)
         {
             if (Done.Task.IsCompleted) return;
-            _audio.Write(data);
+            lock (_audio) _audio.Write(data);
             var now = DateTime.UtcNow;
 
             if (rms > threshold)
@@ -268,7 +276,8 @@ public sealed class Microphone : IDisposable
 
         public byte[] ToWav()
         {
-            var pcm = _audio.ToArray();
+            byte[] pcm;
+            lock (_audio) pcm = _audio.ToArray();   // it may still be growing: this is a copy
             using var output = new MemoryStream();
             using (var writer = new WaveFileWriter(new IgnoreDispose(output), new WaveFormat(Rate, 16, 1)))
                 writer.Write(pcm, 0, pcm.Length);

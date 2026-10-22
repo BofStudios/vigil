@@ -110,6 +110,9 @@ public static class Compact
         if (config.EnableMemory)
             tools.AddRange(NoteTools.All);
 
+        if (config.EnableSystem)
+            tools.AddRange(MediaTools.All);
+
         if (config.EnableMemory)
             tools.Add(Facade("memory", "memory",
                 "Remember a lasting fact about the user (preferences, names), recall notes, or forget them. Never store secrets.",

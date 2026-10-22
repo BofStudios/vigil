@@ -20,7 +20,9 @@ public sealed class TalkPill : Window
     readonly Rectangle[] _bars = new Rectangle[BarCount];
     readonly double[] _history = new double[BarCount];
     readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(33) };
-    readonly TextBlock _label = new() { FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 4, 0) };
+    readonly TextBlock _label = new() { FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 4, 0),
+                                        MaxWidth = 520, TextTrimming = TextTrimming.CharacterEllipsis };
+    bool _hasWords;
     readonly Ellipse _dot = new() { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };
     readonly ScaleTransform _dotScale = new(1, 1);
     Func<float> _level = () => 0f;
@@ -90,6 +92,8 @@ public sealed class TalkPill : Window
         _level = level;
         _hearing = false;
         _label.Text = text;
+        _label.Opacity = 0.75;
+        _hasWords = false;
         Array.Clear(_history);
         Place();
         if (!IsVisible)
@@ -106,7 +110,19 @@ public sealed class TalkPill : Window
     {
         if (!IsVisible) return;
         _hearing = true;
-        _label.Text = "Understanding…";
+        if (!_hasWords) _label.Text = "Understanding…";
+        else _label.Opacity = 0.6;   // the words stay; the final version replaces them in the bar
+    }
+
+    /// <summary>The words so far. Each call replaces the last - later words can change earlier ones.</summary>
+    public void Words(string words)
+    {
+        if (!IsVisible) return;
+        _hasWords = true;
+        // the end of what was said is what matters while you are still saying it
+        _label.Text = words.Length > 70 ? "…" + words[^69..] : words;
+        _label.Opacity = 1;
+        Place();
     }
 
     public void Away()
