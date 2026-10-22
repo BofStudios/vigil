@@ -34,7 +34,15 @@ public partial class ShellWindow
 
     async Task MaybeCheckIn()
     {
-        if (_checkingIn || _checkIn is null || !_config.IsReady) return;
+        if (_config.DoNotDisturb && !_config.Quiet)
+        {
+            // its time ran out: back to normal, said quietly
+            _config.DoNotDisturb = false;
+            _config.QuietUntil = null;
+            Save();
+            RefreshFooter();
+        }
+        if (_checkingIn || _checkIn is null || !_config.IsReady || _config.Quiet) return;
         if (Busy || _approvalPending || _askPending || _yielded || _voice.State is not (Voice.VoiceState.Off or Voice.VoiceState.Idle)) return;
         var moment = _checkIn.Due();
         if (moment is null) return;
@@ -56,6 +64,7 @@ public partial class ShellWindow
 
     void ShowCheckIn(string text)
     {
+        if (_config.Quiet) return;   // turned on while it was being written
         _checkInMessage = text;
         if (_config.Journal) Mind.Journal("checked in", text);
         if (_hiddenByUser)

@@ -291,7 +291,10 @@
                                         <TextBlock x:Name="VoiceChipText" Text="Voice" />
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="TalkChip" Style="{StaticResource Chip}" ToolTip="Talk mode: a conversation, hands free">
+                                <Button x:Name="QuietChip" Style="{StaticResource Chip}" ToolTip="Do not disturb">
+                                    <TextBlock x:Name="QuietGlyph" Style="{StaticResource Glyph}" Text="&#xE708;" FontSize="12" />
+                                </Button>
+                                <Button x:Name="TalkChip" Style="{StaticResource Chip}" ToolTip="Talk mode: every answer spoken">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource Glyph}" Text="&#xE8F2;" FontSize="12" Margin="0,0,6,0" />
                                         <TextBlock x:Name="TalkChipText" Text="Talk" />

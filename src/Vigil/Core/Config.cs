@@ -124,6 +124,14 @@ public sealed class Config
     public int CheckInMinutes { get; set; } = 50;
     /// <summary>Say check-ins out loud as well as showing them.</summary>
     public bool SpeakCheckIns { get; set; } = false;
+    /// <summary>Do not disturb: no check-ins, no advice, nothing said unasked. Vigil still answers when asked.</summary>
+    public bool DoNotDisturb { get; set; } = false;
+    /// <summary>When do-not-disturb ends by itself; null keeps it on until it is turned off.</summary>
+    public DateTime? QuietUntil { get; set; }
+
+    /// <summary>Is do-not-disturb on right now?</summary>
+    [JsonIgnore]
+    public bool Quiet => DoNotDisturb && (QuietUntil is null || DateTime.Now < QuietUntil);
 
     // ---------------------------------------------------------------- window
     public bool StartHidden { get; set; } = false;

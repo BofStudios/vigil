@@ -44,6 +44,7 @@ public partial class HomeWindow : Window
         TalkMode.Click += (_, _) => { _shell.ToggleTalk(); DrawAwareness(); };
         SaysReply.Click += (_, _) => _shell.ReplyCheckIn(talk: false);
         SaysTalk.Click += (_, _) => _shell.ReplyCheckIn(talk: true);
+        AdviceButton.Click += (_, _) => _shell.AskForAdvice();
 
         NewNote.Click += (_, _) => StartNote(null);
         NoteSave.Click += (_, _) => SaveNote();
@@ -139,6 +140,12 @@ public partial class HomeWindow : Window
         var on = _shell.Settings.Awareness;
         AwareDot.Fill = on ? B("Safe") : B("TextFaint");
         TalkModeText.Text = _shell.Talking ? "Talking · tap to end" : "Talk mode";
+        if (_shell.Quiet)
+        {
+            AwareDot.Fill = B("Moderate");
+            AwareText.Text = "Do not disturb · " + _shell.QuietLine.Replace("On until ", "until ");
+            return;
+        }
         AwareText.Text = on ? (Activity.Away ? "Awareness on · you're away" : "Awareness on") : "Awareness off";
     }
 
@@ -435,6 +442,20 @@ public partial class HomeWindow : Window
         VoiceSwitches.Children.Add(ActionRow("Hear it", "Says a line in the voice that will answer you.", "Play", _shell.SayHello));
 
         AwareSwitches.Children.Clear();
+        AwareSwitches.Children.Add(Choice("Do not disturb", "No check-ins, no advice, nothing said unasked - it still answers when you ask. Now: " + _shell.QuietLine + ".",
+            new (string, object)[] { ("Off", "off"), ("1 hour", "hour"), ("Till morning", "morning"), ("Until off", "on") },
+            !_shell.Quiet ? "off" : c.QuietUntil is null ? "on" : "timed",
+            v =>
+            {
+                switch ((string)v)
+                {
+                    case "off": _shell.SetQuiet(false); break;
+                    case "hour": _shell.SetQuiet(true, TimeSpan.FromHours(1)); break;
+                    case "morning": _shell.SetQuiet(true, ShellWindow.UntilMorning); break;
+                    default: _shell.SetQuiet(true); break;
+                }
+                DrawAwareness();
+            }));
         AwareSwitches.Children.Add(Switch("Know which app I'm in", "App names and minutes only - never the screen, titles or typing. Kept in Vigil Mind.",
                                           c.Awareness, on => { _shell.Change(x => x.Awareness = on); DrawAwareness(); }));
         AwareSwitches.Children.Add(Switch("Check in on me", "After a long stretch in one app, or when you come back from a break.",

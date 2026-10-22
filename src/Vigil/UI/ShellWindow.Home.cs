@@ -1,3 +1,4 @@
+using System.Globalization;
 using Vigil.Core;
 
 namespace Vigil.UI;
@@ -38,6 +39,33 @@ public partial class ShellWindow
     internal void SetWake(bool on) { if (WakeOn != on) ToggleWake(); }
     internal void SetClaps(bool on) { if (_config.ClapToWake != on) ToggleClaps(); }
     internal bool English => AnswersInEnglish;
+
+    // ----------------------------------------------------------- do not disturb
+    internal bool Quiet => _config.Quiet;
+
+    /// <summary>Turns do-not-disturb on for a while (null: until turned off), or off.</summary>
+    internal void SetQuiet(bool on, TimeSpan? forHowLong = null)
+    {
+        _config.DoNotDisturb = on;
+        _config.QuietUntil = on && forHowLong is { } span ? DateTime.Now + span : null;
+        Save();
+        if (on) HideCheckIn();
+        RefreshFooter();
+        Toast(!on ? "Do not disturb is off." :
+              _config.QuietUntil is { } until ? "Do not disturb until " + until.ToString("HH:mm") + ". Vigil answers only when you ask." :
+              "Do not disturb is on. Vigil answers only when you ask.");
+    }
+
+    /// <summary>Until tomorrow at eight.</summary>
+    internal static TimeSpan UntilMorning => DateTime.Today.AddDays(1).AddHours(8) - DateTime.Now;
+
+    internal string QuietLine => !_config.Quiet ? "Off" :
+        _config.QuietUntil is { } until ? "On until " + until.ToString(until.Date == DateTime.Today ? "HH:mm" : "ddd HH:mm", CultureInfo.InvariantCulture) : "On until you turn it off";
+
+    /// <summary>Asks Vigil for advice on the day so far.</summary>
+    internal void AskForAdvice() => AskFromHome(
+        "Look at what I have been doing today - the apps and times, and my journal - and give me three short, concrete " +
+        "pieces of advice: what to do next, what to fix in how I work, and one thing for me. Be specific to my day.");
 
     // ----------------------------------------------------------- the voice
     internal bool ElevenLabsReady => _voice.Speaker.ElevenLabsReady;

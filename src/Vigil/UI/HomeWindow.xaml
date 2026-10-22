@@ -120,6 +120,8 @@
                                     <Button x:Name="SaysReply" Style="{StaticResource Primary}" Padding="13,6" FontSize="12.5" Content="Reply" Margin="0,0,6,0" />
                                     <Button x:Name="SaysTalk" Style="{StaticResource Key}" Padding="12,6" FontSize="12.5" Content="Talk" />
                                 </StackPanel>
+                                <Button x:Name="AdviceButton" Style="{StaticResource Key}" Padding="13,6" FontSize="12.5" Margin="0,12,0,0"
+                                        HorizontalAlignment="Left" Content="Give me advice" ToolTip="Vigil looks at your day and gives you three suggestions" />
                             </StackPanel>
                         </Border>
                     </Grid>

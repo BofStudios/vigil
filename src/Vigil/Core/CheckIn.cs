@@ -20,7 +20,7 @@ public sealed class CheckIn
     /// <summary>Called about once a minute. Returns a reason to check in, or null.</summary>
     public Moment? Due()
     {
-        if (!_config.Awareness || !_config.CheckIns) return null;
+        if (!_config.Awareness || !_config.CheckIns || _config.Quiet) return null;
 
         // coming back after a real break is its own moment
         if (Activity.Away)
@@ -64,9 +64,9 @@ public sealed class CheckIn
         var prompt =
             situation + (today.Length > 0 ? " Today so far: " + today + "." : "") +
             (journal.Count > 0 ? "\nRecent journal:\n" + string.Join("\n", journal) : "") +
-            "\n\nWrite one check-in to them: at most two short sentences, warm, a little witty, specific to what they are doing, " +
-            "ending with one question (how it is going, whether they want help with the next step, or a nudge to take a break " +
-            "if it has been very long). English. No greeting formula, no emoji, no lecture.";
+            "\n\nWrite one check-in to them: at most two short sentences, warm and a little witty. Give one concrete, useful piece " +
+            "of advice for what they are doing - a tip, a smarter next step, or a break if it has been very long - and end with " +
+            "one question. English. No greeting formula, no emoji, no lecture.";
 
         var messages = new List<JsonObject>
         {

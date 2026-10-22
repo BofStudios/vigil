@@ -221,6 +221,13 @@ public partial class ShellWindow
         NewChip.Click += (_, _) => NewConversation();
         HomeChip.Click += (_, _) => OpenHome();
         TalkChip.Click += (_, _) => ToggleTalk();
+        QuietChip.Click += (_, _) => Menu(QuietChip, new[]
+        {
+            Option("Do not disturb for an hour", "no check-ins or advice; it answers when you ask", false, () => SetQuiet(true, TimeSpan.FromHours(1))),
+            Option("Until tomorrow morning", "back on at 8:00", false, () => SetQuiet(true, UntilMorning)),
+            Option("Until I turn it off", "", _config.Quiet && _config.QuietUntil is null, () => SetQuiet(true)),
+            Option("Off", "check-ins and advice as usual", !_config.Quiet, () => SetQuiet(false)),
+        });
     }
 
     /// <summary>What "best voice" means on this computer right now.</summary>
@@ -347,6 +354,8 @@ public partial class ShellWindow
         VoiceGlyph.Text = "\uE720";
         VoiceChip.Foreground = listening ? B("Core") : B("TextDim");
         TalkChip.Foreground = _talking ? B("Core") : B("TextDim");
+        QuietChip.Foreground = _config.Quiet ? B("Moderate") : B("TextDim");
+        QuietChip.ToolTip = "Do not disturb: " + QuietLine;
         TalkChipText.Text = _talking ? "Talking" : "Talk";
 
         var tokens = _agent?.Provider.TotalTokens ?? 0;
@@ -398,6 +407,7 @@ public partial class ShellWindow
             menu.Items.Add(Tray.Item("Clap three times to wake", () => Dispatcher.BeginInvoke(ToggleClaps), _config.ClapToWake));
             menu.Items.Add(Tray.Item("Answer in English", () => Dispatcher.BeginInvoke(ToggleEnglish), AnswersInEnglish));
             menu.Items.Add(Tray.Item("Talk mode", () => Dispatcher.BeginInvoke(ToggleTalk), _talking));
+            menu.Items.Add(Tray.Item("Do not disturb", () => Dispatcher.BeginInvoke(() => SetQuiet(!_config.Quiet)), _config.Quiet));
             menu.Items.Add(Tray.Item("Speak answers", () => Dispatcher.BeginInvoke(() => { _config.SpeakReplies = !_config.SpeakReplies; Save(); }), _config.SpeakReplies));
             menu.Items.Add(Tray.Item("Start with Windows", () =>
             {
