@@ -86,6 +86,8 @@ public sealed class Config
     public string PiperVoice { get; set; } = "";
     public string GroqTtsModel { get; set; } = "canopylabs/orpheus-v1-english";
     public string GroqTtsVoice { get; set; } = "daniel";
+    /// <summary>Groq refused its voice (its terms are not accepted yet): not tried, and not mentioned, until it is switched on again.</summary>
+    public bool GroqVoiceRefused { get; set; }
     /// <summary>A Windows voice by name; empty picks the best one for the language.</summary>
     public string TtsVoice { get; set; } = "";
     public double SpeechRate { get; set; } = 1.0;

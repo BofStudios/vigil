@@ -116,6 +116,10 @@ public sealed class ToolSpec
     public bool QuietResult { get; init; }
     /// <summary>The tool takes the pointer or keyboard: light the screen edge while it runs.</summary>
     public bool Drives { get; init; }
+    /// <summary>A plain action whose result says it all ("Paint is open."): when it is the only thing asked
+    /// for and it worked, these words end the turn - no second round trip to the model just to say so,
+    /// which halves the time and the tokens. Null leaves the answer to the model.</summary>
+    public Func<ToolArgs, string, string?>? Finish { get; init; }
 
     public Risk RiskFor(ToolArgs args)
     {

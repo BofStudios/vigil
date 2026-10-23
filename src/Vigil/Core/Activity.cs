@@ -36,11 +36,12 @@ public static class Activity
 
     /// <summary>For `--preview` only: sample numbers in memory, never saved, so screenshots
     /// can show a day without showing anybody's real one.</summary>
-    internal static void Stage(IEnumerable<(string App, double Seconds)> today, string current, TimeSpan streak)
+    internal static void Stage(IEnumerable<(string App, double Seconds)> today, string current, TimeSpan streak, bool staged = true)
     {
         lock (Gate)
         {
-            _staged = _loaded = true;
+            _staged = staged;
+            _loaded = true;
             Today.Clear();
             foreach (var (app, seconds) in today) Today[app] = seconds;
             _current = current;

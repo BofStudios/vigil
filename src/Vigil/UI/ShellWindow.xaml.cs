@@ -60,7 +60,8 @@ public partial class ShellWindow : Window
         _peekTimer.Tick += (_, _) => { _peekTimer.Stop(); if (_shape == Shape.Pill && Shell.IsMouseOver) GoTo(Shape.Bar); };
         _restTimer.Tick += (_, _) => { _restTimer.Stop(); if (CanRest && !Shell.IsMouseOver) GoTo(Shape.Pill); };
         PillFace.MouseLeftButtonUp += (_, _) => Summon();
-        Deactivated += (_, _) => { if (CanRest && !Shell.IsMouseOver) _restTimer.Start(); };
+        Deactivated += (_, _) => TuckAway();
+        _tuckTimer.Tick += (_, _) => { _tuckTimer.Stop(); if (!IsActive) TuckAway(); };
 
         Grip.MouseLeftButtonDown += (_, e) => { _gripDown = e.GetPosition(this); Grip.CaptureMouse(); e.Handled = true; };
         Grip.MouseMove += OnGripMove;
@@ -131,6 +132,7 @@ public partial class ShellWindow : Window
             return;
         }
         _hiddenByUser = false;
+        _tucked = false;
         _summoned = true;
         if (_yielded) { _yielded = false; Topmost = true; }
         if (!IsVisible) Show();
@@ -151,6 +153,8 @@ public partial class ShellWindow : Window
         _watch.Start();
         if (_hiddenByUser) Hide();
         ShowFirstRun();
+        // set up and ready: it waits out of sight until it is called (Ctrl+<, Ctrl+Shift+Space, the tray)
+        if (_config.IsReady && !_preview && !_summoned) { _tucked = true; Hide(); }
         // only "Hey Vigil" or three claps keep anything listening; otherwise the microphone opens while Ctrl+< is held
         if (_config.EnableVoice && (_config.WakeWord || _config.ClapToWake))
             StartVoice(quiet: true);
@@ -174,6 +178,41 @@ public partial class ShellWindow : Window
     }
 
     // ====================================================================== shapes
+    // ================================================================ out of the way
+    // Click anything else and Vigil is gone - like Spotlight. Still working, it shrinks to the pill and
+    // goes once it is done. It stays while it needs you: an approval, a question, or you talking.
+    bool _tucked;
+    readonly DispatcherTimer _tuckTimer = new() { Interval = TimeSpan.FromSeconds(5) };
+
+    void TuckAway()
+    {
+        if (_preview || !IsVisible || IsActive) return;
+        if (_approvalPending || _askPending || SetupView.Visibility == Visibility.Visible) return;
+        if (_voice.Listening || _recording is { Done: false }) return;
+        if (Busy || _voice.Speaker.Speaking)
+        {
+            // working or still talking: small, and gone when it has finished
+            if (_shape != Shape.Pill) GoTo(Shape.Pill);
+            _tuckTimer.Stop();
+            _tuckTimer.Start();
+            return;
+        }
+        _tuckTimer.Stop();
+        _restTimer.Stop();
+        _summoned = false;
+        _tucked = true;
+        GoTo(Shape.Pill);
+        Hide();
+    }
+
+    /// <summary>After an answer, if nobody is looking at it, it does not stay on the screen.</summary>
+    void TuckSoon()
+    {
+        if (IsActive) return;
+        _tuckTimer.Stop();
+        _tuckTimer.Start();
+    }
+
     bool CanRest =>
         _shape == Shape.Bar && Input.Text.Length == 0 && !IsActive && !Busy && !_askPending && !_approvalPending
         && _voice.State is VoiceState.Off or VoiceState.Idle;
@@ -278,6 +317,7 @@ public partial class ShellWindow : Window
     {
         _hiddenByUser = false;
         _summoned = true;
+        _tucked = false;
         if (_yielded)
         {
             _yielded = false;
@@ -385,7 +425,7 @@ public partial class ShellWindow : Window
         {
             _yielded = false;
             Topmost = true;
-            if (!_hiddenByUser) Show();
+            if (!_hiddenByUser && !_tucked) Show();
         }
     }
 

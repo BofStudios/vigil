@@ -78,7 +78,7 @@ internal sealed class Cdp : IDisposable
         var cdp = new Cdp();
         // a browser left open from earlier is reused rather than fought with
         var port = await ExistingPort(portFile, ct);
-        if (port == 0)
+        for (var attempt = 1; port == 0; attempt++)
         {
             try { File.Delete(portFile); } catch (IOException) { }
             var start = new ProcessStartInfo(browser) { UseShellExecute = false };
@@ -90,18 +90,42 @@ internal sealed class Cdp : IDisposable
                      })
                 start.ArgumentList.Add(arg);
             cdp._process = Process.Start(start);
+            if (cdp._process is { } started)
+                try { File.WriteAllText(Path.Combine(profile, "vigil.pid"), started.Id.ToString()); } catch (IOException) { }
 
-            var deadline = DateTime.UtcNow.AddSeconds(20);
+            var deadline = DateTime.UtcNow.AddSeconds(attempt == 1 ? 12 : 20);
             while (port == 0 && DateTime.UtcNow < deadline)
             {
                 await Task.Delay(150, ct);
                 port = await ExistingPort(portFile, ct);
             }
-            if (port == 0) throw new InvalidOperationException("The browser started but did not open its control port.");
+            if (port != 0) break;
+            if (attempt == 2) throw new InvalidOperationException("The browser started but did not open its control port.");
+            // a copy Vigil started earlier still holds this profile without a control port (it hung, or was
+            // started some other way): the new one just hands over to it. Close Vigil's own copy and go again.
+            CloseOwnBrowser(profile);
         }
         cdp.Port = port;
         await cdp.AttachAsync(ct);
         return cdp;
+    }
+
+    /// <summary>Ends the browser Vigil itself started on this profile - only that one: never the person's own.</summary>
+    static void CloseOwnBrowser(string profile)
+    {
+        try
+        {
+            var pidFile = Path.Combine(profile, "vigil.pid");
+            if (File.Exists(pidFile) && int.TryParse(File.ReadAllText(pidFile), out var pid))
+            {
+                using var process = Process.GetProcessById(pid);
+                var name = process.ProcessName.ToLowerInvariant();
+                if (name is "chrome" or "msedge" or "brave") { process.Kill(entireProcessTree: true); process.WaitForExit(5000); }
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or System.ComponentModel.Win32Exception) { }
+        foreach (var leftover in new[] { "DevToolsActivePort", "lockfile", "SingletonLock" })
+            try { File.Delete(Path.Combine(profile, leftover)); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     static async Task<int> ExistingPort(string portFile, CancellationToken ct)

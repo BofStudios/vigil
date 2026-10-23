@@ -252,7 +252,7 @@ public sealed class VoiceController : IDisposable
                 if (!MayTranscribe(final: false)) continue;
                 lastSeconds = seconds;
                 Transcript partial;
-                try { partial = await ears.TranscribeAsync(wav, _config.VoiceLanguage, ct).ConfigureAwait(false); }
+                try { partial = await ears.TranscribeAsync(wav, _config.VoiceLanguage, ct, quick: true).ConfigureAwait(false); }
                 catch (ProviderException) { break; }   // rate limit or a hiccup: the final one still comes
                 if (recording.Done) break;              // the final one is on its way: no older guess over it
                 var text = SpeechText.StripWake(partial.Text).Trim();

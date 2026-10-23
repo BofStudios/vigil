@@ -206,6 +206,8 @@ public static class SystemTools
                 seen.Add(display + (string.IsNullOrEmpty(version) ? "" : "  " + version));
             }
         }
+        // what can be opened by name - the Start menu, Store apps included - comes first
+        foreach (var start in StartApps.All()) seen.Add(start.Name);
         var entries = seen.Where(e => filter.Length == 0 || e.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
         if (entries.Count == 0) return "No installed applications found.";
         var header = entries.Count + " application(s) found" + (entries.Count > limit ? " (showing first " + limit + ")" : "");
@@ -250,6 +252,7 @@ public static class SystemTools
         if (target.Length == 0) throw new ToolError("An application name, file, folder or web address is required.");
 
         string launch;
+        StartApps.App? app = null;
         var risk = Risk.Moderate;
         if (target.Contains("://") || System.Text.RegularExpressions.Regex.IsMatch(target, @"^[a-z][a-z0-9+.-]+:$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
             launch = target;   // a web address, or an app's own protocol (spotify:, ms-settings:)
@@ -261,7 +264,9 @@ public static class SystemTools
                 launch = local;
                 if (Runnable.Contains(Path.GetExtension(local))) risk = Risk.High;
             }
-            else launch = FindShortcut(target) ?? target;   // "Discord", or "notepad" for the shell to find
+            else if ((app = StartApps.Find(target)) is not null)
+                launch = app.Name;   // anything in the Start menu, Store apps included: "Paint", "WhatsApp"
+            else launch = FindShortcut(target) ?? target;   // a desktop shortcut, or "mspaint" for the shell to find
         }
 
         var (allowed, reason) = ctx.Guard.CheckAction("open_app", "opening: " + launch, risk,
@@ -270,12 +275,13 @@ public static class SystemTools
 
         try
         {
-            Process.Start(new ProcessStartInfo(launch) { UseShellExecute = true, WorkingDirectory = ctx.Cwd })?.Dispose();
+            if (app is not null) StartApps.Launch(app);
+            else Process.Start(new ProcessStartInfo(launch) { UseShellExecute = true, WorkingDirectory = ctx.Cwd })?.Dispose();
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
             throw new ToolError("Could not open '" + target + "': " + ex.Message +
-                                ". Try list_installed_apps to find its exact name, or give the full path.");
+                                ". Use system with action apps to see the exact names, or give the full path.");
         }
         return launch == target ? target + " opened." : target + " opened (" + Path.GetFileNameWithoutExtension(launch) + ").";
     }
@@ -367,6 +373,16 @@ public static class SystemTools
             Description = "Open an app by its Start-menu name, a file, a folder or a URL.",
             Parameters = Object(P("target", Str(), true)),
             Handler = OpenApp, Preview = a => "open: " + a.Str("target"),
+            Finish = (a, output) =>
+            {
+                var target = a.Str("target");
+                if (target.Contains("://")) return "It's open in your browser.";
+                // "paint opened (Paint)." - the name Windows gives it reads better than what was typed
+                var match = System.Text.RegularExpressions.Regex.Match(output, @"^(?<asked>.+?) opened(?: \((?<name>[^)]+)\))?\.$");
+                if (!match.Success) return null;
+                var name = match.Groups["name"].Success ? match.Groups["name"].Value : match.Groups["asked"].Value;
+                return name.Contains('\\') || name.Contains('/') ? "It's open." : name + " is open.";
+            },
         },
         new()
         {

@@ -22,13 +22,30 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
     public string VisionModel { get; set; }
     public double Temperature { get; set; }
     public string SpeechModel { get; set; }
-    /// <summary>Groq counts tokens per minute per model, so when one is out of breath its sibling usually is not.</summary>
-    public string? Sibling => !_isGroq ? null : Model switch
+    /// <summary>Groq counts tokens per minute per model (8,000 each on the free key), so when one is out of
+    /// breath the next usually is not. Tried in this order, starting after the one in use.</summary>
+    public static readonly string[] GroqRelay = { "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b" };
+
+    /// <summary>The models to fall back to, in order - empty off Groq.</summary>
+    public IEnumerable<string> Relay(string from)
     {
-        "openai/gpt-oss-20b" => "openai/gpt-oss-120b",
-        "openai/gpt-oss-120b" => "openai/gpt-oss-20b",
-        _ => null,
-    };
+        if (!_isGroq) yield break;
+        var start = Array.IndexOf(GroqRelay, from);
+        for (var i = 1; i < GroqRelay.Length + 1; i++)
+        {
+            var next = GroqRelay[(Math.Max(start, 0) + i) % GroqRelay.Length];
+            if (next != from) yield return next;
+        }
+    }
+
+    public string? Sibling => Relay(Model).FirstOrDefault();
+
+    /// <summary>The words Whisper should expect: names it would otherwise mishear, in both languages
+    /// Vigil is spoken to in. A hint, not a script - it only tilts close calls.</summary>
+    const string SpeechHint = "Vigil, YouTube, Spotify, Chrome, Paint, WhatsApp, Discord. Şarkıyı aç, uygulamayı aç, not al. Open, play, search.";
+
+    /// <summary>The live words while someone is still talking use the quick model; the final text the accurate one.</summary>
+    public string QuickSpeechModel => _isGroq ? "whisper-large-v3-turbo" : SpeechModel;
     public long TotalTokens => Interlocked.Read(ref _tokens);
 
     public OpenAiCompatibleProvider(string name, string baseUrl, string apiKey, string model,
@@ -48,8 +65,9 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
     {
         if (string.IsNullOrWhiteSpace(c.ApiKey))
             throw new AuthException("No Groq key yet. Get a free one at https://console.groq.com/keys");
+        // the full Whisper for what is sent: the turbo one mishears Turkish, and mixed Turkish and English
         return new("groq", "https://api.groq.com/openai/v1", c.ApiKey, c.Model, c.VisionModel,
-                   c.Temperature, "whisper-large-v3-turbo");
+                   c.Temperature, "whisper-large-v3");
     }
 
     public static OpenAiCompatibleProvider Gemini(Config c)
@@ -76,7 +94,7 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
                                                   Action<string>? onText, CancellationToken ct)
     {
         var model = Model;
-        var triedSibling = false;
+        using var relay = Relay(Model).GetEnumerator();
         for (var attempt = 1; ; attempt++)
         {
             var emitted = false;
@@ -108,10 +126,9 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
                 if ((int)response.StatusCode == 429)
                 {
                     // out of tokens for this minute: the sibling model has its own allowance
-                    if (!triedSibling && Sibling is { } sibling)
+                    if (relay.MoveNext())
                     {
-                        triedSibling = true;
-                        model = sibling;
+                        model = relay.Current;
                         attempt--;
                         continue;
                     }
@@ -245,14 +262,15 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
     }
 
     // ------------------------------------------------------------ transcribe
-    public async Task<Transcript> TranscribeAsync(byte[] wav, string language, CancellationToken ct)
+    public async Task<Transcript> TranscribeAsync(byte[] wav, string language, CancellationToken ct, bool quick = false)
     {
         var fields = new List<(string, string)>
         {
-            ("model", SpeechModel),
+            ("model", quick ? QuickSpeechModel : SpeechModel),
             ("response_format", "verbose_json"),
             ("temperature", "0"),
             ("language", language),
+            ("prompt", SpeechHint),
         };
         using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/audio/transcriptions")
         {

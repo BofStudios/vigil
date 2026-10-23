@@ -53,7 +53,7 @@ public partial class ShellWindow : IAgentHost
             if (_drivers == 0 && _hiddenForDriving)
             {
                 _hiddenForDriving = false;
-                if (!_hiddenByUser && !_yielded) Show();
+                if (!_hiddenByUser && !_yielded && !_tucked) Show();
             }
         };
         AllowButton.Click += (_, _) => AnswerApproval(Answer.Yes);
@@ -186,6 +186,7 @@ public partial class ShellWindow : IAgentHost
 
     void SetBusy(bool on)
     {
+        if (!on) TuckSoon();
         Working(on);
         SendButton.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         StopButton.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
@@ -485,6 +486,7 @@ public partial class ShellWindow : IAgentHost
         _approvalArmed = false;
 
         _hiddenByUser = false;
+        _tucked = false;
         if (_yielded) { _yielded = false; Topmost = true; }
         if (!IsVisible) Show();
         GoTo(Shape.Panel);
@@ -597,6 +599,7 @@ public partial class ShellWindow : IAgentHost
         PlaceholderText.Text = "Type your answer…";
         PlaceholderHint.Text = _voiceTurn is not null ? "   or hold Ctrl+< and say it" : "";
         _hiddenByUser = false;
+        _tucked = false;
         if (!IsVisible) Show();
         GoTo(Shape.Panel, focus: true);
         UpdateTray();

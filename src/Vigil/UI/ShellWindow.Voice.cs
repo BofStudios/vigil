@@ -136,6 +136,7 @@ public partial class ShellWindow
     {
         if (_yielded) return;   // a game is full screen: answer by voice, stay out of its way
         _hiddenByUser = false;
+        _tucked = false;
         if (!IsVisible) Show();
         if (_shape == Shape.Pill) GoTo(Shape.Bar);
     }
@@ -229,7 +230,11 @@ public partial class ShellWindow
         App.Note("voice: " + problem);
         if (problem == "GROQ_TERMS")
         {
-            if (_toldNoVoice.Add("groq"))
+            // remembered, so it is neither tried nor mentioned again every time Vigil starts
+            var first = !_config.GroqVoiceRefused;
+            _config.GroqVoiceRefused = true;
+            Save();
+            if (first && _toldNoVoice.Add("groq"))
                 Toast("For Vigil's natural English voice, accept the Orpheus terms once on your Groq account - " +
                       "Voice menu › “Turn on the natural voice”. Until then the Windows voice speaks.", B("Moderate"));
             return;

@@ -205,6 +205,8 @@ public partial class ShellWindow
             Option("Turn on the natural voice…", "accept Groq's Orpheus terms once, in your browser", false, () =>
             {
                 OpenUrl(Voice.Speaker.GroqTermsUrl);
+                _config.GroqVoiceRefused = false;
+                Save();
                 _voice.Speaker.RetryNaturalVoice();
             }, enabled: ProviderFactory.GroqVoice(_config) is not null),
             Option("Say something", "hear how it sounds", false, () => _voice.Speaker.Say(Hello(), SpeechLanguage)),

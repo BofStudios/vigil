@@ -303,7 +303,7 @@ public sealed class Speaker : IDisposable
             }
         }
 
-        if ((engine is "auto" or "groq") && code == "en" && !_groqRefused && ProviderFactory.GroqVoice(_config) is { } groq)
+        if ((engine is "auto" or "groq") && code == "en" && !_groqRefused && !_config.GroqVoiceRefused && ProviderFactory.GroqVoice(_config) is { } groq)
         {
             // the configured voice first; if Groq has renamed its voices, the others it is known to offer
             foreach (var voiceName in new[] { _workingGroqVoice ?? _config.GroqTtsVoice, "troy", "austin", "daniel" }.Distinct())

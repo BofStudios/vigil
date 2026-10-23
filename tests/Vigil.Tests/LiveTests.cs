@@ -10,8 +10,20 @@ namespace Vigil.Tests;
 /// <summary>Talks to the real model on the real key. Off unless VIGIL_LIVE=1, because it
 /// spends the person's quota and needs the network.</summary>
 [Collection("mind")]
-public class LiveTests
+public class LiveTests : IDisposable
 {
+    // a throwaway Vigil Mind: tests must never write into the person's real journal
+    readonly string _root = Path.Combine(Path.GetTempPath(), "vigil-live-mind-" + Guid.NewGuid().ToString("N")[..8]);
+
+    public LiveTests() => Mind.UseRoot(_root);
+
+    public void Dispose()
+    {
+        Mind.UseRoot("");
+        Activity.Stage(Array.Empty<(string, double)>(), "", TimeSpan.Zero, staged: false);
+        try { Directory.Delete(_root, true); } catch (IOException) { }
+    }
+
     sealed class Host : IAgentHost
     {
         public readonly StringBuilder Streamed = new();
@@ -38,7 +50,7 @@ public class LiveTests
     static bool Live => Environment.GetEnvironmentVariable("VIGIL_LIVE") == "1";
 
     [Fact]
-    public async Task It_uses_a_tool_answers_and_closes_with_a_question()
+    public async Task It_uses_a_tool_and_answers_without_inventing_things_to_offer()
     {
         if (!Live) return;
         var config = Config.Load();
@@ -47,16 +59,34 @@ public class LiveTests
 
         var answer = await agent.RunAsync("What time is it right now? Check with your tool.");
 
-        File.WriteAllText(Path.Combine(Path.GetTempPath(), "vigil-live-errors.txt"), string.Join(Environment.NewLine, host.Errors));
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "vigil-live-answer.txt"), answer);
         Assert.Empty(host.Errors);
         Assert.Contains("system", host.Tools);
         Assert.False(string.IsNullOrWhiteSpace(answer));
-        Assert.EndsWith("?", answer.TrimEnd().TrimEnd('*', '_', '"', '”', ')'));
-        File.WriteAllText(Path.Combine(Path.GetTempPath(), "vigil-live-answer.txt"), answer);
+        Assert.DoesNotMatch("(?i)alarm|close (google )?chrome", answer);   // what it said before: nobody asked for that
+        Assert.DoesNotMatch("(?i)^\\W*(hey|hi|hello)\\b", answer);
     }
 
     [Fact]
-    public async Task A_spoken_turkish_question_gets_a_short_turkish_answer_with_a_question()
+    public async Task Hello_is_answered_like_a_person_not_with_a_report_on_the_apps()
+    {
+        if (!Live) return;
+        // what it saw when it answered "Hello?" with League of Legends and Chrome times
+        Activity.Stage(new (string, double)[] { ("League of Legends", 13 * 60), ("Google Chrome", 40) }, "Google Chrome", TimeSpan.FromSeconds(40));
+        var config = Config.Load();
+        var host = new Host();
+        var agent = new Agent(config, ProviderFactory.Build(config), Registry.Build(config), host);
+
+        var answer = await agent.RunAsync("Hello?", spokenLanguage: "english");
+
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "vigil-live-hello.txt"), answer);
+        Assert.DoesNotMatch("(?i)league|chrome|minutes", answer);
+        Assert.DoesNotMatch("(?i)hey vigil|^\\W*vigil\\b", answer);
+        Assert.True(answer.Length < 300, answer);
+    }
+
+    [Fact]
+    public async Task A_spoken_turkish_question_gets_a_short_turkish_answer()
     {
         if (!Live) return;
         var config = Config.Load();
@@ -69,7 +99,6 @@ public class LiveTests
         Assert.Empty(host.Errors);
         Assert.True(answer.Length < 400, answer);
         Assert.Equal("tr", Vigil.Voice.SpeechText.GuessLanguage(answer, "?"));
-        Assert.EndsWith("?", answer.TrimEnd());
         File.WriteAllText(Path.Combine(Path.GetTempPath(), "vigil-live-answer-tr.txt"), answer);
     }
 
@@ -110,7 +139,7 @@ public class LiveTests
     public async Task Take_a_note_lands_in_vigil_mind()
     {
         if (!Live) return;
-        var root = Path.Combine(Path.GetTempPath(), "vigil-live-mind-" + Guid.NewGuid().ToString("N")[..8]);
+        var root = Path.Combine(Path.GetTempPath(), "vigil-live-note-" + Guid.NewGuid().ToString("N")[..8]);
         Mind.UseRoot(root);
         try
         {
@@ -127,7 +156,7 @@ public class LiveTests
         }
         finally
         {
-            Mind.UseRoot("");
+            Mind.UseRoot(_root);
             try { Directory.Delete(root, true); } catch (IOException) { }
         }
     }

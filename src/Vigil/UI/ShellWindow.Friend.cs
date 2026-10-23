@@ -72,7 +72,7 @@ public partial class ShellWindow
             _tray.Tell("Vigil", text);   // put away on purpose: a quiet note by the clock instead
             return;
         }
-        if (!IsVisible) Show();
+        if (!IsVisible) { _tucked = false; Show(); }
         CheckInText.Text = text;
         CheckInCard.Visibility = Visibility.Visible;
         CheckInCard.To(OpacityProperty, 1, 260);

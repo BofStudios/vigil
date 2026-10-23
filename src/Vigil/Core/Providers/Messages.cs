@@ -123,7 +123,8 @@ public interface IProvider
 /// <summary>Some providers can also hear.</summary>
 public interface ITranscriber
 {
-    Task<Transcript> TranscribeAsync(byte[] wav, string language, CancellationToken ct);
+    /// <summary>`quick`: a faster, rougher pass - for the live words while someone is still talking.</summary>
+    Task<Transcript> TranscribeAsync(byte[] wav, string language, CancellationToken ct, bool quick = false);
 }
 
 /// <summary>...and some can speak.</summary>

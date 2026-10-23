@@ -35,6 +35,14 @@ public static class MediaTools
         return (match.Groups["id"].Value, Unescape(match.Groups["title"].Value));
     }
 
+    /// <summary>"Madonna - Like A Prayer (Official Video) [HD]" -> "Madonna - Like A Prayer": what a person would say.</summary>
+    public static string Speakable(string title)
+    {
+        var plain = Regex.Replace(WebUtility.HtmlDecode(title), @"\s*[\(\[][^\)\]]*[\)\]]", "");
+        plain = Regex.Replace(plain, @"\s*\|.*$", "").Trim(' ', '-', '|');
+        return plain.Length > 0 ? plain : title;
+    }
+
     static string Unescape(string json)
     {
         try { return System.Text.Json.JsonSerializer.Deserialize<string>("\"" + json + "\"") ?? json; }
@@ -73,6 +81,11 @@ public static class MediaTools
                           "Give the real title and artist (resolve what they meant first - \"Madonna's prayer song\" is \"Madonna Like a Prayer\").",
             Parameters = Object(P("query", Str("Artist and exact title, e.g. \"Madonna Like a Prayer\""), true)),
             Handler = Play, Preview = a => "play: " + a.Str("query"),
+            Finish = (_, output) =>
+            {
+                var match = Regex.Match(output, "^Playing \"(?<title>.+)\" on YouTube");
+                return match.Success ? "Playing " + Speakable(match.Groups["title"].Value) + "." : null;
+            },
         },
     };
 }
