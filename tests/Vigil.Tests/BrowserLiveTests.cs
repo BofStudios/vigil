@@ -22,6 +22,10 @@ public class BrowserLiveTests
         var title = await cdp.SendAsync("Runtime.evaluate", new JsonObject { ["expression"] = "document.title", ["returnByValue"] = true }, CancellationToken.None);
         File.WriteAllText(Path.Combine(Path.GetTempPath(), "vigil-browser-live.txt"),
             "browser " + Cdp.FindBrowser() + "\nstarted in " + started.TotalSeconds.ToString("0.0") + " s\ntitle " + title?.ToJsonString());
+        // close the window it opened: left running, it holds the test run open with it
+        foreach (var pidFile in Directory.GetFiles(Path.GetDirectoryName(Vigil.Core.Paths.BrowserProfile)!, "vigil.pid", SearchOption.AllDirectories))
+            try { using var p = Process.GetProcessById(int.Parse(File.ReadAllText(pidFile))); p.Kill(entireProcessTree: true); }
+            catch (Exception) { }
         Assert.True(cdp.Port > 0);
         Assert.Contains("Example", title?["result"]?["value"]?.GetValue<string>() ?? "");
     }
