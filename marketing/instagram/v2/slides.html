@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vigil 2.0 carousel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0A0A0C; --ink:#F4F4F6; --dim:#A6A8B3; --faint:#6D6F7B; --cy:#6FE3FF; --card:#16161B; --rim:#2A2B33; --warn:#F2C14E; --bad:#FF7A7A; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { background:var(--bg); }
+  .slide { display:none; width:1080px; height:1350px; position:relative; overflow:hidden; background:var(--bg); color:var(--ink);
+           font-family:'Space Grotesk',sans-serif; padding:72px; }
+  .slide.on { display:block; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .top { display:flex; justify-content:space-between; align-items:center; font-family:'JetBrains Mono',monospace; font-size:21px; letter-spacing:.22em; color:var(--dim); }
+  .top b { display:flex; gap:16px; align-items:center; font-weight:500; }
+  .top svg { width:22px; height:22px; }
+  h1 { font-weight:700; font-size:104px; line-height:1.02; letter-spacing:-.035em; margin-top:58px; }
+  #s3 h1 { margin-top:46px; }
+  #s3 .sub { margin-top:26px; font-size:31px; }
+  #s1 h1 { font-size:88px; margin-top:44px; }
+  h1 em { font-style:normal; background:var(--cy); color:#06161B; padding:0 16px 6px; border-radius:10px; display:inline-block; margin-left:-4px; }
+  .sub { font-size:34px; line-height:1.36; color:var(--dim); margin-top:34px; max-width:900px; }
+  .sub b { color:var(--ink); font-weight:500; }
+  .foot { position:absolute; left:72px; right:72px; bottom:64px; display:flex; justify-content:space-between; align-items:center;
+          font-family:'JetBrains Mono',monospace; font-size:21px; letter-spacing:.2em; color:var(--faint); text-transform:uppercase; }
+  .foot .go { color:var(--cy); }
+  .tag { border:1px solid var(--rim); border-radius:999px; padding:12px 26px; color:var(--dim); font-size:20px; letter-spacing:.16em; }
+  .tag.c { color:var(--cy); }
+  .tags { display:flex; gap:14px; }
+  .panel { background:var(--card); border:1px solid var(--rim); border-radius:26px; }
+
+  /* 1: the log */
+  .log { margin-top:38px; padding:26px 38px 14px; font-family:'JetBrains Mono',monospace; font-size:25px; line-height:1; }
+  .log .head { display:flex; justify-content:space-between; color:var(--faint); font-size:19px; letter-spacing:.16em; margin-bottom:16px; text-transform:uppercase; }
+  .row { display:flex; gap:22px; height:40px; align-items:center; border-top:1px solid #1F2027; }
+  .row:first-of-type { border-top:0; }
+  .row .t { color:var(--faint); width:130px; }
+  .row .k { color:var(--ink); width:250px; }
+  .row .d { color:var(--dim); flex:1; white-space:nowrap; overflow:hidden; }
+  .row .n { color:var(--cy); width:46px; text-align:right; }
+  .row.no .k, .row.no .n { color:var(--bad); }
+
+  /* 2: approval */
+  .shot { margin-top:56px; border-radius:26px; overflow:hidden; border:1px solid var(--rim); box-shadow:0 40px 90px rgba(0,0,0,.55); }
+  .shot img { display:block; width:100%; }
+  .ticks { margin-top:46px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; }
+  .tick { padding:24px 26px; }
+  .tick .k { font-family:'JetBrains Mono',monospace; font-size:19px; letter-spacing:.14em; color:var(--cy); text-transform:uppercase; margin-bottom:10px; }
+  .tick .v { font-size:26px; line-height:1.28; color:var(--ink); }
+
+  /* 3: before / after */
+  .ba { display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:30px; }
+  .ba .panel { padding:28px 34px 30px; }
+  .ba .lab { font-family:'JetBrains Mono',monospace; font-size:20px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); }
+  .ba .big { font-size:116px; font-weight:700; letter-spacing:-.05em; line-height:1; margin:14px 0 6px; }
+  .ba .big small { font-size:48px; color:var(--faint); letter-spacing:-.02em; font-weight:500; }
+  .ba .before .big { color:var(--bad); }
+  .ba .after .big { color:var(--cy); }
+  .ba .what { font-size:26px; line-height:1.3; color:var(--dim); }
+  .dots { display:flex; gap:10px; margin-top:26px; }
+  .dots i { width:34px; height:34px; border-radius:50%; display:block; }
+  .before .dots i { background:#3A1D1F; border:2px solid #6B2C2F; }
+  .before .dots i.ok { background:var(--bad); border-color:var(--bad); }
+  .after .dots i { background:var(--cy); border:2px solid var(--cy); }
+  .err { margin-top:26px; padding:22px 32px; font-family:'JetBrains Mono',monospace; font-size:25px; line-height:1.4; color:var(--bad); border-color:#4A2528; background:#1A1214; }
+  .err span { color:var(--faint); display:block; font-size:19px; letter-spacing:.14em; text-transform:uppercase; margin-bottom:10px; }
+
+  /* 4: talk */
+  .keys { display:flex; align-items:center; gap:18px; margin-top:54px; }
+  .key { font-family:'JetBrains Mono',monospace; font-weight:700; font-size:52px; padding:26px 42px; border-radius:18px; background:#202128; border:1px solid #34353F; border-bottom-width:6px; color:var(--ink); }
+  .key.hold { border-color:var(--cy); color:var(--cy); }
+  .plus { font-size:40px; color:var(--faint); }
+  .keys .hint { font-size:28px; color:var(--dim); margin-left:14px; line-height:1.25; }
+  .pillwrap { margin-top:56px; }
+  .pillwrap img { width:100%; display:block; border-radius:50px; box-shadow:0 30px 70px rgba(0,0,0,.5); border:1px solid #2c2d35; }
+  .says { margin-top:40px; padding:30px 36px; font-size:40px; line-height:1.25; letter-spacing:-.01em; }
+  .says span { display:block; font-family:'JetBrains Mono',monospace; font-size:19px; letter-spacing:.16em; color:var(--faint); text-transform:uppercase; margin-bottom:12px; }
+  .says .caret { display:inline-block; width:4px; height:40px; background:var(--cy); vertical-align:-6px; margin-left:4px; }
+  .duck { margin-top:34px; padding:28px 36px; display:flex; align-items:center; gap:30px; }
+  .duck .lab { font-size:26px; color:var(--dim); width:380px; line-height:1.25; }
+  .duck .bar { flex:1; height:16px; border-radius:8px; background:#23242B; position:relative; }
+  .duck .bar i { position:absolute; left:0; top:0; bottom:0; border-radius:8px; background:linear-gradient(90deg,var(--cy),#8B7BFF); }
+  .duck .pct { font-family:'JetBrains Mono',monospace; font-size:26px; color:var(--ink); width:90px; text-align:right; }
+
+  /* 5: work mode */
+  .wm { margin-top:54px; padding:40px 44px 42px; border-color:#2F4D56; background:linear-gradient(180deg,#14191C,#121216); box-shadow:0 40px 90px rgba(0,0,0,.5); }
+  .wm .l { font-family:'JetBrains Mono',monospace; font-size:21px; letter-spacing:.2em; color:var(--cy); font-weight:700; display:flex; justify-content:space-between; }
+  .wm .l span { color:var(--faint); font-weight:400; }
+  .wm p { font-size:46px; line-height:1.2; letter-spacing:-.015em; margin-top:22px; }
+  .wm p b { color:var(--cy); font-weight:700; }
+  .reads { margin-top:34px; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .reads .panel { padding:26px 30px; }
+  .reads .k { font-family:'JetBrains Mono',monospace; font-size:19px; letter-spacing:.14em; text-transform:uppercase; margin-bottom:12px; }
+  .reads .y .k { color:var(--cy); } .reads .n .k { color:var(--bad); }
+  .reads li { list-style:none; font-size:27px; line-height:1.5; color:var(--ink); }
+  .reads .n li { color:var(--dim); text-decoration:line-through; text-decoration-color:#5a5c68; }
+
+  /* 6: cta */
+  .logo { width:190px; height:190px; margin-top:56px; display:block; }
+  .steps { margin-top:40px; display:grid; gap:14px; }
+  .step { display:flex; align-items:center; gap:26px; padding:24px 32px; font-size:31px; }
+  .step b { font-family:'JetBrains Mono',monospace; color:var(--cy); font-size:26px; width:34px; }
+  .step small { color:var(--dim); font-size:25px; margin-left:auto; font-family:'JetBrains Mono',monospace; }
+  .cta h1 { margin-top:34px; font-size:112px; }
+  .dl { margin-top:56px; padding:30px 36px; display:flex; align-items:center; justify-content:space-between; }
+  .dl .a { font-size:34px; font-weight:700; } .dl .a small { display:block; font-weight:400; font-size:23px; color:var(--dim); margin-top:6px; }
+  .dl .u { font-family:'JetBrains Mono',monospace; font-size:27px; color:var(--cy); }
+</style>
+</head>
+<body>
+
+<!-- 1 ------------------------------------------------------------>
+<section class="slide" id="s1">
+  <div class="top"><b><svg viewBox="0 0 256 256"><path d="M68 76 L124 178 L188 58" fill="none" stroke="#F4F4F6" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>VIGIL 2.0</b><span>1 / 6</span></div>
+  <h1>My AI asked permission <em>13 times</em> to play one song.</h1>
+  <div class="panel log">
+    <div class="head"><span>audit.jsonl &nbsp;·&nbsp; "play Black Hole Sun"</span><span>asks</span></div>
+    <div class="row"><span class="t">12:37:09</span><span class="k">screen_capture</span><span class="d">search box</span><span class="n">1</span></div>
+    <div class="row"><span class="t">12:37:12</span><span class="k">press_keys</span><span class="d">ctrl+l</span><span class="n">2</span></div>
+    <div class="row"><span class="t">12:37:14</span><span class="k">keyboard_type</span><span class="d">Black Hole Sun</span><span class="n">3</span></div>
+    <div class="row"><span class="t">12:37:16</span><span class="k">screen_capture</span><span class="d">search field</span><span class="n">4</span></div>
+    <div class="row"><span class="t">12:37:18</span><span class="k">press_keys</span><span class="d">enter</span><span class="n">5</span></div>
+    <div class="row"><span class="t">12:37:20</span><span class="k">screen_capture</span><span class="d">what is playing</span><span class="n">6</span></div>
+    <div class="row"><span class="t">12:37:23</span><span class="k">click_on</span><span class="d">Search</span><span class="n">7</span></div>
+    <div class="row"><span class="t">12:37:24</span><span class="k">click_on</span><span class="d">Search</span><span class="n">8</span></div>
+    <div class="row"><span class="t">12:38:10</span><span class="k">press_keys</span><span class="d">enter</span><span class="n">9</span></div>
+    <div class="row"><span class="t">12:38:12</span><span class="k">press_keys</span><span class="d">down</span><span class="n">10</span></div>
+    <div class="row"><span class="t">12:38:13</span><span class="k">press_keys</span><span class="d">ctrl+f</span><span class="n">11</span></div>
+    <div class="row"><span class="t">12:38:15</span><span class="k">screen_capture</span><span class="d">search icon</span><span class="n">12</span></div>
+    <div class="row no"><span class="t">12:38:38</span><span class="k">click_on</span><span class="d">declined</span><span class="n">13</span></div>
+  </div>
+  <div class="sub" style="margin-top:28px;font-size:29px">Straight from Vigil's own log. Safe, yes. <b>Unusable.</b> So I rebuilt how it asks.</div>
+  <div class="foot"><span>Windows / free AI / your PC</span><span class="go">Swipe →</span></div>
+</section>
+
+<!-- 2 ------------------------------------------------------------>
+<section class="slide" id="s2">
+  <div class="top"><b><svg viewBox="0 0 256 256"><path d="M68 76 L124 178 L188 58" fill="none" stroke="#F4F4F6" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>VIGIL 2.0</b><span>2 / 6</span></div>
+  <h1>Now it asks <em>once.</em></h1>
+  <div class="sub">One approval per task, like Parsec asking before someone takes over your screen.</div>
+  <div class="shot"><img src="img/approval.png" alt=""></div>
+  <div class="ticks">
+    <div class="panel tick"><div class="k">Ends</div><div class="v">when the task does</div></div>
+    <div class="panel tick"><div class="k">Revoke</div><div class="v">Esc, from any app</div></div>
+    <div class="panel tick"><div class="k">Never</div><div class="v">"always", or by voice</div></div>
+  </div>
+  <div class="foot"><span>Mouse / keyboard / screen</span><span class="go">Swipe →</span></div>
+</section>
+
+<!-- 3 ------------------------------------------------------------>
+<section class="slide" id="s3">
+  <div class="top"><b><svg viewBox="0 0 256 256"><path d="M68 76 L124 178 L188 58" fill="none" stroke="#F4F4F6" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>VIGIL 2.0</b><span>3 / 6</span></div>
+  <h1>Then it died after <em>one</em> message.</h1>
+  <div class="sub">Every message re-sent the whole chat, folder listings included. One big folder and the free tier refused everything after it.</div>
+  <div class="panel err"><span>what Vigil told me</span>"That key has no credit left."</div>
+  <div class="ba">
+    <div class="panel before"><div class="lab">Before</div><div class="big">1<small> / 6</small></div><div class="what">messages answered</div>
+      <div class="dots"><i class="ok"></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="panel after"><div class="lab">After</div><div class="big">6<small> / 6</small></div><div class="what">messages answered</div>
+      <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+  </div>
+  <div class="sub" style="font-size:27px;margin-top:26px">The key was fine; the request was too big. Old turns are now kept as question and answer.</div>
+  <div class="foot"><span>Same chat, same key, same day</span><span class="go">Swipe →</span></div>
+</section>
+
+<!-- 4 ------------------------------------------------------------>
+<section class="slide" id="s4">
+  <div class="top"><b><svg viewBox="0 0 256 256"><path d="M68 76 L124 178 L188 58" fill="none" stroke="#F4F4F6" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>VIGIL 2.0</b><span>4 / 6</span></div>
+  <h1>Hold a key. <em>Talk.</em></h1>
+  <div class="keys"><div class="key hold">Ctrl</div><div class="plus">+</div><div class="key hold">&lt;</div><div class="hint">hold, speak,<br>let go</div></div>
+  <div class="pillwrap"><img src="img/talkpill.png" alt=""></div>
+  <div class="panel says"><span>words as you say them</span>Play Madonna, Like a Prayer<i class="caret"></i></div>
+  <div class="panel duck"><div class="lab">Your music while you talk</div><div class="bar"><i style="width:16%"></i></div><div class="pct">16%</div></div>
+  <div class="sub" style="font-size:29px;margin-top:30px">The mic is closed the rest of the time. Press it while Vigil speaks and it stops.</div>
+  <div class="foot"><span>Push to talk / any language</span><span class="go">Swipe →</span></div>
+</section>
+
+<!-- 5 ------------------------------------------------------------>
+<section class="slide" id="s5">
+  <div class="top"><b><svg viewBox="0 0 256 256"><path d="M68 76 L124 178 L188 58" fill="none" stroke="#F4F4F6" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>VIGIL 2.0</b><span>5 / 6</span></div>
+  <h1>A <em>work mode</em> that interrupts you.</h1>
+  <div class="panel wm">
+    <div class="l">WORK MODE<span>after 10 minutes</span></div>
+    <p><b>19 app switches</b> in 10 minutes. Close Discord and WhatsApp now and give the next 25 minutes to Visual Studio Code only.</p>
+  </div>
+  <div class="reads">
+    <div class="panel y"><div class="k">It reads</div><ul><li>app names</li><li>minutes in each</li><li>switches, breaks</li></ul></div>
+    <div class="panel n"><div class="k">It never reads</div><ul><li>your screen</li><li>window titles</li><li>what you type</li></ul></div>
+  </div>
+  <div class="sub" style="font-size:29px;margin-top:34px">Tell it what you're working on. Every 10, 20 or 30 minutes it says the one thing worth saying. Do Not Disturb silences it.</div>
+  <div class="foot"><span>Real output, staged 10-minute stretch</span><span class="go">Swipe →</span></div>
+</section>
+
+<!-- 6 ------------------------------------------------------------>
+<section class="slide cta" id="s6">
+  <div class="top"><b><svg viewBox="0 0 256 256"><path d="M68 76 L124 178 L188 58" fill="none" stroke="#F4F4F6" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>VIGIL 2.0</b><span>6 / 6</span></div>
+  <svg class="logo" viewBox="0 0 256 256"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6FB6FF"/><stop offset="1" stop-color="#8B7BFF"/></linearGradient></defs><circle cx="128" cy="128" r="118" fill="#101116" stroke="url(#g)" stroke-width="8"/><circle cx="128" cy="128" r="94" fill="none" stroke="#2E5560" stroke-width="1.5" stroke-dasharray="1 7" stroke-linecap="round"/><path d="M86 94 L124 164 L172 80" fill="none" stroke="#F4F4F6" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1>Vigil 2.0 is <em>out.</em></h1>
+  <div class="sub">One file. No install. Windows 10 and 11. Free AI models, open source, MIT.</div>
+  <div class="steps"><div class="panel step"><b>1</b>Download Vigil.exe<small>one file, ~75 MB</small></div><div class="panel step"><b>2</b>Paste a free Groq key<small>console.groq.com</small></div><div class="panel step"><b>3</b>Hold Ctrl+&lt; and talk<small>that's it</small></div></div>
+  <div class="foot"><span class="mono" style="color:var(--ink);font-weight:700;letter-spacing:.02em;font-size:30px;text-transform:none">github.com/BofStudios/vigil</span><span>Bof Studios</span></div>
+</section>
+
+<script>
+  const n = new URLSearchParams(location.search).get('s') || '1';
+  document.getElementById('s' + n).classList.add('on');
+</script>
+</body>
+</html>
