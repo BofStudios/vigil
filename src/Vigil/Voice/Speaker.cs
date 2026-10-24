@@ -92,6 +92,34 @@ public sealed class Speaker : IDisposable
     PiperVoice? _piper;
     volatile bool _piperFailed;
     volatile bool _elevenFailed;
+    DateTime _voiceboxRestUntil;
+    bool _voiceboxTold;
+    (string Voice, string Language)? _voiceboxProfile;
+
+    /// <summary>Try Voicebox again straight away - after it was started, or a voice was picked.</summary>
+    public void RetryVoicebox()
+    {
+        _voiceboxRestUntil = default;
+        _voiceboxProfile = null;
+        Voicebox.Recheck();
+    }
+
+    /// <summary>The language the chosen Voicebox voice speaks: a voice made for English mangles Turkish,
+    /// so other languages go to the next voice. Asked once.</summary>
+    async Task<string> VoiceboxLanguageAsync(CancellationToken ct)
+    {
+        if (_voiceboxProfile is { } known && known.Voice == _config.VoiceboxVoice) return known.Language;
+        var language = "en";
+        try
+        {
+            var profiles = await Voicebox.ProfilesAsync(_config.VoiceboxUrl, ct).ConfigureAwait(false);
+            var chosen = profiles.FirstOrDefault(p => p.Name.Equals(_config.VoiceboxVoice, StringComparison.OrdinalIgnoreCase) || p.Id == _config.VoiceboxVoice);
+            if (chosen is not null) language = Code(chosen.Language);
+        }
+        catch (ProviderException) { }
+        _voiceboxProfile = (_config.VoiceboxVoice, language);
+        return language;
+    }
 
     /// <summary>Try ElevenLabs again - after a new key, say.</summary>
     public void RetryElevenLabs() => _elevenFailed = false;
@@ -275,6 +303,25 @@ public sealed class Speaker : IDisposable
     {
         var code = Code(language);
         var engine = _config.TtsEngine;
+
+        // Voicebox, running on this computer: a natural voice that never leaves the machine, no key, no allowance
+        if (engine is "auto" or "voicebox" && DateTime.UtcNow >= _voiceboxRestUntil
+            && await Voicebox.RunningAsync(_config.VoiceboxUrl, ct).ConfigureAwait(false)
+            && (engine == "voicebox" || await VoiceboxLanguageAsync(ct).ConfigureAwait(false) == code))
+        {
+            try { return await Voicebox.SpeakAsync(_config.VoiceboxUrl, _config.VoiceboxVoice, text, ct).ConfigureAwait(false); }
+            catch (ProviderException ex)
+            {
+                // a minute's rest and then it is tried again: Voicebox may still be loading, or was closed
+                _voiceboxRestUntil = DateTime.UtcNow + TimeSpan.FromMinutes(1);
+                Voicebox.Recheck();
+                if (!_voiceboxTold)
+                {
+                    _voiceboxTold = true;
+                    Failed?.Invoke(ex.Message + " - another voice is speaking for now.");
+                }
+            }
+        }
 
         // ElevenLabs, with a key: the most natural voice there is, in every language
         if (engine is "auto" or "elevenlabs" && !_elevenFailed && !string.IsNullOrWhiteSpace(_config.ElevenLabsApiKey))

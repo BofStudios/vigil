@@ -20,7 +20,8 @@ public sealed class CheckIn
     /// <summary>Called about once a minute. Returns a reason to check in, or null.</summary>
     public Moment? Due()
     {
-        if (!_config.Awareness || !_config.CheckIns || _config.Quiet) return null;
+        // work mode has its own, closer watch: one voice at a time
+        if (!_config.Awareness || !_config.CheckIns || _config.Quiet || _config.WorkMode) return null;
 
         // coming back after a real break is its own moment
         if (Activity.Away)

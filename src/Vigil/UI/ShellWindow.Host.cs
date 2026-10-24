@@ -59,6 +59,24 @@ public partial class ShellWindow : IAgentHost
         AllowButton.Click += (_, _) => AnswerApproval(Answer.Yes);
         DenyButton.Click += (_, _) => AnswerApproval(Answer.No);
         AlwaysButton.Click += (_, _) => AnswerApproval(Answer.Always);
+        _escWatch.Tick += (_, _) => WatchEsc();
+    }
+
+    /// <summary>While a task holds the mouse, keyboard and screen, Esc - pressed anywhere, in any app -
+    /// ends the task and hands them straight back.</summary>
+    readonly DispatcherTimer _escWatch = new() { Interval = TimeSpan.FromMilliseconds(40) };
+
+    void WatchEsc()
+    {
+        if (!Busy)
+        {
+            _escWatch.Stop();
+            return;
+        }
+        if (_agent?.Guard.ControlGranted != true || (Native.GetAsyncKeyState(0x1B) & 0x8000) == 0) return;
+        _escWatch.Stop();
+        StopEverything();
+        Toast("Stopped - your mouse and keyboard are yours again.");
     }
 
     // =================================================================== the agent
@@ -115,6 +133,9 @@ public partial class ShellWindow : IAgentHost
     async void Submit(string text, string? language)
     {
         _voice.Speaker.Stop();   // a new request cuts off the old answer
+        // switching work mode is Vigil's own business, not a task for the model
+        if (Voice.SpeechText.EndsWork(text) && InWorkMode) { EndWork(); return; }
+        if (Voice.SpeechText.StartsWork(text) && !InWorkMode) { _ = StartWork(); return; }
         if (!EnsureAgent())
         {
             GoTo(Shape.Panel);
@@ -128,6 +149,7 @@ public partial class ShellWindow : IAgentHost
         }
 
         AddUser(text, spoken: language is not null);
+        _approvalSaid = false;
         GoTo(Shape.Panel);
         // the language Vigil will answer in - English unless it is set to follow the user
         // in talk mode everything is answered out loud, even a line that was typed
@@ -497,16 +519,19 @@ public partial class ShellWindow : IAgentHost
         RiskPill.Background = new SolidColorBrush(Color.FromArgb(0x22, colour.Color.R, colour.Color.G, colour.Color.B));
         RiskText.Foreground = colour;
         RiskText.Text = risk.Label().ToUpperInvariant();
+        var takeover = Rules.AlwaysAsk.Contains(action.Tool);
         var (icon, verb) = Describe(action.Tool);
         ApprovalIcon.Text = icon;
         ApprovalIcon.Foreground = colour;
-        ApprovalTool.Text = verb;
-        ApprovalSummary.Text = Core.Tools.Text.Clip(action.Summary, 320);
+        // mouse, keyboard and screen are handed over for the whole task, so that is what is asked
+        ApprovalTool.Text = takeover ? "Use your mouse, keyboard and screen for this task" : verb;
+        ApprovalSummary.Text = takeover ? "First: " + Core.Tools.Text.Clip(action.Summary, 300) : Core.Tools.Text.Clip(action.Summary, 320);
         ApprovalReason.Text = action.Verdict.Reason.Length > 0 ? char.ToUpper(action.Verdict.Reason[0]) + action.Verdict.Reason[1..] : "";
         ApprovalDetail.Text = action.Detail;
         ApprovalDetailBox.Visibility = action.Detail.Trim().Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        ApprovalNote.Text = Rules.AlwaysAsk.Contains(action.Tool)
-            ? "Mouse, keyboard and screen are confirmed every single time. There is no “always” for these, and a voice cannot approve them."
+        ApprovalNote.Text = takeover
+            ? "Asked once per task, in every mode: Vigil hands control back when the task ends, and Esc takes it back at any moment. " +
+              "The next task asks again, and a voice can never approve it."
             : risk == Risk.High ? "High-risk actions are asked every time." : "";
         ApprovalNoteRow.Visibility = ApprovalNote.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         AlwaysButton.Visibility = action.CanAlwaysAllow ? Visibility.Visible : Visibility.Collapsed;
@@ -529,9 +554,15 @@ public partial class ShellWindow : IAgentHost
         Keyboard.Focus(Approval);
         Native.FlashWindow(_hwnd, true);
         UpdateTray();
+        // said once a turn, not at every card: a task that asks twice must not keep repeating itself,
+        // and Windows' notification comes with a sound of its own
+        if (_approvalSaid) return;
+        _approvalSaid = true;
         if (_voiceTurn is { } language) _voice.Speaker.Feed("\n" + Phrases.Get("approve", language) + "\n");
         if (!IsActive) _tray.Tell("Vigil needs your approval", action.Summary);
     }
+
+    bool _approvalSaid;
 
     void OnApprovalKey(KeyEventArgs e)
     {
@@ -552,6 +583,7 @@ public partial class ShellWindow : IAgentHost
         _approvalPending = false;
         _approvalArmed = false;
         _approval?.TrySetResult(answer);
+        if (answer != Answer.No) _escWatch.Start();
     }
 
     void CloseApproval()
@@ -575,7 +607,7 @@ public partial class ShellWindow : IAgentHost
                 _askPending = false;
                 AskCard.Fade(false, 140);
                 PlaceholderText.Text = "Ask Vigil anything…";
-                PlaceholderHint.Text = "   or say “Hey Vigil”  ·  Ctrl+<";
+                PlaceholderHint.Text = "   or hold Ctrl+< and talk";
                 UpdateTray();
             });
             return result;

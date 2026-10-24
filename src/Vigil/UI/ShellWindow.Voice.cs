@@ -32,6 +32,9 @@ public partial class ShellWindow
         _voice.Heard += heard => Dispatcher.BeginInvoke(() => OnHeard(heard));
         _voice.Problem += problem => Dispatcher.BeginInvoke(() => OnVoiceProblem(problem));
         _voice.Partial += words => Dispatcher.BeginInvoke(() => ShowLiveWords(words));
+        // music and videos step back while Vigil answers, as they do while you talk
+        _voice.Speaker.SpeakingChanged += speaking => Ducker.Want("speak", speaking && _config.DuckOthers);
+        _ = Voicebox.RunningAsync(_config.VoiceboxUrl);   // so the voice menu knows whether it is there
         _levelTimer.Tick += (_, _) => AnimateLevels();
         _holdWatch.Tick += (_, _) => WatchHold();
     }
@@ -91,15 +94,21 @@ public partial class ShellWindow
     Microphone.Recording? BeginRecording()
     {
         if (!_voice.On) StartVoice(quiet: true);
-        var recording = _voice.PressToTalk();
+        var recording = _voice.PressToTalk();   // Vigil stops talking the moment the key goes down
         if (recording is null) return null;
         _recording = recording;
         _handsFree = false;
-        _ = recording.Result.ContinueWith(_ => Dispatcher.BeginInvoke(() =>
+        // and everything else playing goes quiet while you talk, so you are heard - Wispr Flow does the same
+        if (_config.DuckOthers) Ducker.Want("talk", true);
+        _ = recording.Result.ContinueWith(_ =>
         {
-            if (_recording == recording) _recording = null;
-            ShowVoiceState(_voice.State);
-        }), TaskScheduler.Default);
+            Ducker.Want("talk", false);
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_recording == recording) _recording = null;
+                ShowVoiceState(_voice.State);
+            });
+        }, TaskScheduler.Default);
         return recording;
     }
 

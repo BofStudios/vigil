@@ -40,6 +40,7 @@ public partial class App : Application
         }
 
         Paths.Ensure();
+        _ = Task.Run(Voice.Ducker.PutBackLeftovers);   // sound left low by a Vigil that closed mid-sentence
         var config = Config.Load();
         if (config.Migrated) { try { config.Save(); } catch (IOException) { } }
         Mind.UseRoot(config.MindFolder);
@@ -66,6 +67,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Voice.Ducker.Release();
         _single?.Dispose();
         base.OnExit(e);
     }

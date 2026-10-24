@@ -120,7 +120,7 @@
                         <Grid Grid.Column="1" Margin="12,0,10,0" VerticalAlignment="Center">
                             <TextBlock x:Name="Placeholder" FontSize="15.5" Foreground="{StaticResource TextFaint}"
                                        VerticalAlignment="Center" IsHitTestVisible="False" Margin="2,0,0,1" TextTrimming="CharacterEllipsis">
-                                <Run x:Name="PlaceholderText" Text="Ask Vigil anything…" /><Run x:Name="PlaceholderHint" Text="   or say “Hey Vigil”  ·  Ctrl+&lt;" Foreground="#4A4D55" FontSize="13" />
+                                <Run x:Name="PlaceholderText" Text="Ask Vigil anything…" /><Run x:Name="PlaceholderHint" Text="   or hold Ctrl+&lt; and talk" Foreground="#4A4D55" FontSize="13" />
                             </TextBlock>
                             <TextBox x:Name="Input" Style="{StaticResource Field}" VerticalAlignment="Center" TextWrapping="Wrap"
                                      AcceptsReturn="False" MaxHeight="96" MaxLength="20000" />
@@ -294,6 +294,12 @@
                                 <Button x:Name="QuietChip" Style="{StaticResource Chip}" ToolTip="Do not disturb">
                                     <TextBlock x:Name="QuietGlyph" Style="{StaticResource Glyph}" Text="&#xE708;" FontSize="12" />
                                 </Button>
+                                <Button x:Name="WorkChip" Style="{StaticResource Chip}" ToolTip="Work mode: Vigil watches how the work goes and steps in with advice">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE821;" FontSize="12" Margin="0,0,6,0" />
+                                        <TextBlock x:Name="WorkChipText" Text="Work" />
+                                    </StackPanel>
+                                </Button>
                                 <Button x:Name="TalkChip" Style="{StaticResource Chip}" ToolTip="Talk mode: every answer spoken">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource Glyph}" Text="&#xE8F2;" FontSize="12" Margin="0,0,6,0" />
@@ -413,6 +419,8 @@
                         </Viewbox>
                     </Grid>
                     <StackPanel Grid.Column="1">
+                        <TextBlock x:Name="CheckInLabel" Text="WORK MODE" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource Core}"
+                                   Margin="0,0,0,4" Visibility="Collapsed" />
                         <TextBlock x:Name="CheckInText" TextWrapping="Wrap" FontSize="14" LineHeight="20" />
                         <StackPanel Orientation="Horizontal" Margin="0,11,0,0">
                             <Button x:Name="CheckInReply" Style="{StaticResource Primary}" Padding="13,6" FontSize="12.5" Content="Reply" Margin="0,0,6,0" />

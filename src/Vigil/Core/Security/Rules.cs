@@ -193,10 +193,12 @@ public static class Rules
     //
     // Everything else can be waved through by auto or yolo. These cannot: when
     // something else is driving your pointer and typing on your behalf, a
-    // standing permission is not consent, it is a blank cheque. So they are
-    // asked every single time, no mode skips them, "always allow" is not
-    // offered, and the answer has to come from a person at the keyboard or
-    // mouse - never from a voice, which a video playing nearby could fake.
+    // standing permission is not consent, it is a blank cheque. So every task
+    // that reaches for them asks first - once, the way Parsec asks when someone
+    // wants to take over - and hands them back when it ends. No mode skips it,
+    // "always allow" is not offered, and the answer has to come from a person
+    // at the keyboard or mouse - never from a voice, which a video playing
+    // nearby could fake.
     // ----------------------------------------------------------------------
     public static readonly IReadOnlySet<string> AlwaysAsk = new HashSet<string>
     {

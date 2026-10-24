@@ -31,6 +31,20 @@ public static class SpeechText
     /// <summary>"Let's talk", "talk mode": the whole utterance starts one.</summary>
     public static bool StartsTalk(string heard) => StartTalkWords.IsMatch(heard);
 
+    static readonly Regex StartWorkWords = new(
+        @"^\W*((start |turn on |switch on )?work ?mode( on)?|(let'?s|time to) (get to )?work|çalışma modu(nu)?( aç| başlat)?|çalışma moduna geç|iş modu(nu)?( aç)?)\W*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    static readonly Regex EndWorkWords = new(
+        @"^\W*((stop |end |turn off |switch off )(the )?work ?mode|work ?mode off|çalışma modu(nu)? (kapat|bitir|durdur)|iş modu(nu)? kapat)\W*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>"Work mode", "çalışma modunu aç": the whole message starts work mode.</summary>
+    public static bool StartsWork(string text) => StartWorkWords.IsMatch(text);
+
+    /// <summary>"Stop work mode", "çalışma modunu kapat".</summary>
+    public static bool EndsWork(string text) => EndWorkWords.IsMatch(text);
+
     static List<string> Words(string text) =>
         Regex.Matches(text.ToLowerInvariant(), @"[\p{L}\p{N}']+").Select(m => m.Value).ToList();
 

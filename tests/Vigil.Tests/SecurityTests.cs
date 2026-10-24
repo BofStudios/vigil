@@ -94,17 +94,33 @@ public class SecurityTests
     [InlineData("ask")]
     [InlineData("auto")]
     [InlineData("yolo")]
-    public void Mouse_keyboard_and_screen_are_asked_every_time_in_every_mode(string mode)
+    public void Mouse_keyboard_and_screen_are_asked_for_every_task_in_every_mode(string mode)
     {
         var asked = 0;
         var guard = Make(mode, _ => { asked++; return Answer.Always; });
-        foreach (var tool in Rules.AlwaysAsk)
+        for (var task = 0; task < 3; task++)
         {
-            Assert.True(guard.CheckAction(tool, "x", Risk.Moderate).Allowed);
-            Assert.True(guard.CheckAction(tool, "x", Risk.Moderate).Allowed);
+            foreach (var tool in Rules.AlwaysAsk)
+            {
+                Assert.True(guard.CheckAction(tool, "x", Risk.Moderate).Allowed);
+                Assert.True(guard.CheckAction(tool, "x", Risk.Moderate).Allowed);
+            }
+            guard.EndTask();
+            Assert.False(guard.ControlGranted);
         }
-        // "always" was answered every time, and every time it was asked again
-        Assert.Equal(Rules.AlwaysAsk.Count * 2, asked);
+        // once per task, like Parsec letting someone take over - and "always" did not carry into the next task
+        Assert.Equal(3, asked);
+    }
+
+    [Fact]
+    public void Declining_control_hands_nothing_over()
+    {
+        var asked = 0;
+        var guard = Make("yolo", _ => { asked++; return Answer.No; });
+        Assert.False(guard.CheckAction("mouse_click", "x", Risk.Moderate).Allowed);
+        Assert.False(guard.ControlGranted);
+        Assert.False(guard.CheckAction("keyboard_type", "x", Risk.Moderate).Allowed);
+        Assert.Equal(2, asked);   // still the person's call each time it is asked, never assumed
     }
 
     [Fact]

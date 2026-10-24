@@ -15,6 +15,7 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
     readonly string _apiKey;
     readonly bool _isGroq;
     bool _omitTemperature;
+    bool _omitReasoning;
     long _tokens;
 
     public string Name { get; }
@@ -108,6 +109,8 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
             };
             if (!_omitTemperature)
                 payload["temperature"] = Temperature;
+            if (_isGroq && !_omitReasoning && ReasoningFor(model) is { } effort)
+                payload["reasoning_effort"] = effort;
             if (tools is { Count: > 0 })
             {
                 payload["tools"] = tools.DeepClone();
@@ -123,6 +126,17 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
             {
                 var wait = RetryAfter(response);
                 var error = await Http.ErrorText(response).ConfigureAwait(false);
+                // more than the whole minute's allowance in one request: every model has the same limit
+                if (TooLarge((int)response.StatusCode, error))
+                    throw new TooLargeException("The conversation has grown too long for one request.");
+                // a model that does not take a thinking setting: ask again without one
+                if ((int)response.StatusCode == 400 && error.Contains("reasoning", StringComparison.OrdinalIgnoreCase)
+                    && !_omitReasoning)
+                {
+                    _omitReasoning = true;
+                    attempt--;
+                    continue;
+                }
                 if ((int)response.StatusCode == 429)
                 {
                     // out of tokens for this minute: the sibling model has its own allowance
@@ -252,6 +266,8 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
         };
         if (!_omitTemperature)
             payload["temperature"] = 0.2;
+        if (_isGroq && !_omitReasoning && ReasoningFor(VisionModel) is { } effort)
+            payload["reasoning_effort"] = effort;
 
         using var request = Http.Json(HttpMethod.Post, _baseUrl + "/chat/completions", payload, Auth());
         using var response = await Http.SendAsync(request, false, TimeSpan.FromMinutes(2), ct).ConfigureAwait(false);
@@ -326,6 +342,20 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
 
     public bool SupportsTools(string model) => !NoToolModels.Contains(model.ToLowerInvariant());
 
+    /// <summary>How hard the model should think before it answers. Running a PC is mostly picking the right
+    /// tool, not puzzling: gpt-oss on "low" writes about a third of the thinking tokens and answers sooner,
+    /// and Qwen answers straight away when told not to think. Measured on Groq.</summary>
+    internal static string? ReasoningFor(string model) =>
+        model.StartsWith("openai/gpt-oss", StringComparison.OrdinalIgnoreCase) ? "low"
+        : model.StartsWith("qwen/", StringComparison.OrdinalIgnoreCase) ? "none"
+        : null;
+
+    /// <summary>Groq's 413: "Request too large ... on tokens per minute". Its text links to billing, which
+    /// must not be read as an empty account.</summary>
+    internal static bool TooLarge(int status, string error) =>
+        status == 413 || error.Contains("request too large", StringComparison.OrdinalIgnoreCase)
+                      || error.Contains("reduce your message size", StringComparison.OrdinalIgnoreCase);
+
     static TimeSpan? RetryAfter(HttpResponseMessage response)
     {
         if (response.Headers.RetryAfter?.Delta is { } delta) return delta;
@@ -350,6 +380,8 @@ public class OpenAiCompatibleProvider : IProvider, ITranscriber, ISpeechSynthesi
         var keys = _isGroq ? "https://console.groq.com/keys" : "https://platform.openai.com/api-keys";
         if (error.StartsWith("401") || lowered.Contains("invalid api key") || lowered.Contains("unauthorized"))
             return new AuthException("That key was not accepted. Check it at " + keys);
+        if (TooLarge(0, error))
+            return new TooLargeException("That was too much to send in one go.");
         if (error.StartsWith("429") || lowered.Contains("rate limit"))
             return new RateLimitException((_isGroq ? "Groq" : "The provider") + " rate limit reached. Wait a moment and try again.");
         if (lowered.Contains("quota") || lowered.Contains("billing") || lowered.Contains("credit"))

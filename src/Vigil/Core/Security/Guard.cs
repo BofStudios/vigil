@@ -27,6 +27,17 @@ public sealed class Guard
     public bool Audit { get; set; }
     public int DeniedCount { get; private set; }
 
+    bool _controlGranted;
+
+    /// <summary>Whether the task in hand may use the mouse, keyboard and screen without asking again.</summary>
+    public bool ControlGranted { get { lock (_lock) return _controlGranted; } }
+
+    /// <summary>The task is over (done, failed or stopped): control goes back to the person.</summary>
+    public void EndTask()
+    {
+        lock (_lock) _controlGranted = false;
+    }
+
     public Guard(string mode = "ask", Func<GuardAction, Answer>? confirm = null,
                  IEnumerable<string>? extraProtected = null, bool audit = true)
     {
@@ -60,17 +71,22 @@ public sealed class Guard
                 "Vigil does not disable security protections, extract credentials or perform " +
                 "unrecoverable destruction. If it is truly needed, the user must do it themselves.");
 
-        // 2. Taking the pointer, the keyboard or the screen is asked every time.
+        // 2. Taking the pointer, the keyboard or the screen is asked for every task, in every mode -
+        //    once, the way Parsec asks when someone wants to take over, and handed back when the task ends.
         if (Rules.AlwaysAsk.Contains(action.Tool))
         {
+            lock (_lock)
+                if (_controlGranted)
+                    return (true, "control handed over for this task");
             if (Confirm is null)
                 return (false, "Control of the mouse, keyboard and screen is always confirmed, " +
                                "and there is nobody to ask in a non-interactive session.");
             var answer = Confirm(action);
-            // deliberately not remembered: "always" is not on offer here
-            return answer is Answer.Yes or Answer.Always
-                ? (true, "user allowed this one")
-                : (false, "user declined");
+            if (answer is not (Answer.Yes or Answer.Always))
+                return (false, "user declined");
+            // for this task only: "always" is not on offer here, and the next task asks again
+            lock (_lock) _controlGranted = true;
+            return (true, "user handed over control for this task");
         }
 
         // 3. A session-wide allowance covers MODERATE only; HIGH is asked again every time.

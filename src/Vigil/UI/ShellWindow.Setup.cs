@@ -194,6 +194,12 @@ public partial class ShellWindow
             Option("Answer in English", "whatever language you speak to it in", AnswersInEnglish, ToggleEnglish),
             Option("Speak answers", "when you asked by voice", _config.SpeakReplies, () => { _config.SpeakReplies = !_config.SpeakReplies; Save(); }),
             Option("Talk mode", "every answer spoken; hold Ctrl+< to talk, or to interrupt", _talking, ToggleTalk),
+            Option("Lower other sounds while we talk", "music and videos step back while you hold Ctrl+< and while Vigil speaks",
+                   _config.DuckOthers, () => { _config.DuckOthers = !_config.DuckOthers; Save(); }),
+            Option("Voicebox voice…", Voice.Voicebox.SeenRunning
+                       ? (_config.VoiceboxVoice.Length > 0 ? _config.VoiceboxVoice : "Voicebox's default") + " - natural, on this PC, no key"
+                       : "free and local (voicebox.sh) - start or get it",
+                   Voice.Voicebox.SeenRunning && _config.TtsEngine is "auto" or "voicebox", VoiceboxMenu),
             Option("ElevenLabs voice…", _voice.Speaker.ElevenLabsReady ? Voice.ElevenLabs.NameOf(_config.ElevenLabsVoice) + " - the most natural voice"
                                                                        : "add your ElevenLabs key in the app's Settings",
                    _voice.Speaker.ElevenLabsReady, OpenHome),
@@ -217,12 +223,22 @@ public partial class ShellWindow
             Option("Ask", "asks before anything that changes the system", _config.ApprovalMode == "ask", () => SetMode("ask")),
             Option("Auto", "routine changes run; risky ones are asked", _config.ApprovalMode == "auto", () => SetMode("auto")),
             Option("Yolo", "everything runs except what is blocked", _config.ApprovalMode == "yolo", () => SetMode("yolo")),
-            Option("Mouse, keyboard and screen: asked every time", "in every mode, no exceptions", true, () => { }, enabled: false),
+            Option("Mouse, keyboard and screen: asked once per task", "in every mode, no exceptions - Esc takes them back", true, () => { }, enabled: false),
         });
 
         NewChip.Click += (_, _) => NewConversation();
         HomeChip.Click += (_, _) => OpenHome();
         TalkChip.Click += (_, _) => ToggleTalk();
+        WorkChip.Click += (_, _) => Menu(WorkChip, new[]
+        {
+            Option(InWorkMode ? "Stop work mode" : "Start work mode",
+                   InWorkMode ? (_config.WorkGoal.Length > 0 ? "working on: " + _config.WorkGoal : "watching since " + _work!.Started.ToString("HH:mm"))
+                           : "watches how it goes, steps in with advice", InWorkMode, ToggleWork),
+            Option("Every 10 minutes", "", _config.WorkMinutes == 10, () => SetWorkMinutes(10)),
+            Option("Every 20 minutes", "", _config.WorkMinutes == 20, () => SetWorkMinutes(20)),
+            Option("Every 30 minutes", "", _config.WorkMinutes == 30, () => SetWorkMinutes(30)),
+            Option("What it looks at", "app names and minutes only - never the screen or what you type", false, () => { }, enabled: false),
+        });
         QuietChip.Click += (_, _) => Menu(QuietChip, new[]
         {
             Option("Do not disturb for an hour", "no check-ins or advice; it answers when you ask", false, () => SetQuiet(true, TimeSpan.FromHours(1))),
@@ -338,6 +354,60 @@ public partial class ShellWindow
     {
         _config.TtsEngine = engine;
         _voice.Speaker.RetryNaturalVoice();
+        _voice.Speaker.RetryVoicebox();
+        Save();
+        _voice.Speaker.Say(Hello(), SpeechLanguage);
+    }
+
+    void SetWorkMinutes(int minutes)
+    {
+        _config.WorkMinutes = minutes;
+        Save();
+        Toast("Work mode steps in every " + minutes + " minutes.");
+    }
+
+    /// <summary>The voices made in Voicebox, to pick from - or how to get it, when it is not running.</summary>
+    async void VoiceboxMenu()
+    {
+        if (!await Voice.Voicebox.RunningAsync(_config.VoiceboxUrl))
+        {
+            if (Voice.Voicebox.Installed() is { } exe)
+            {
+                OpenUrl(exe);
+                Toast("Starting Voicebox. Once it is up, pick a voice in it and Vigil will speak with it.");
+                _voice.Speaker.RetryVoicebox();
+            }
+            else
+            {
+                OpenUrl(Voice.Voicebox.Site);
+                Toast("Voicebox is a free voice studio that runs on this PC. Install it, download a voice model in it " +
+                      "(Kokoro is light and quick), make or pick a voice - Vigil speaks with it as soon as it is running.");
+            }
+            return;
+        }
+        IReadOnlyList<Voice.Voicebox.Profile> profiles;
+        try { profiles = await Voice.Voicebox.ProfilesAsync(_config.VoiceboxUrl); }
+        catch (ProviderException ex)
+        {
+            Toast(ex.Message, B("Moderate"));
+            return;
+        }
+        var items = new List<MenuItem>
+        {
+            Option("Voicebox's default voice", "the one set in Voicebox", _config.VoiceboxVoice.Length == 0, () => SetVoiceboxVoice("")),
+        };
+        items.AddRange(profiles.Select(p => Option(p.Name, p.Language, p.Name.Equals(_config.VoiceboxVoice, StringComparison.OrdinalIgnoreCase),
+                                                   () => SetVoiceboxVoice(p.Name))));
+        if (profiles.Count == 0)
+            items.Add(Option("No voices yet", "make or pick one in Voicebox first", false, () => { }, enabled: false));
+        Menu(VoiceChip, items);
+    }
+
+    void SetVoiceboxVoice(string name)
+    {
+        _config.VoiceboxVoice = name;
+        if (_config.TtsEngine is not ("auto" or "voicebox")) _config.TtsEngine = "auto";
+        _voice.Speaker.RetryVoicebox();
         Save();
         _voice.Speaker.Say(Hello(), SpeechLanguage);
     }
@@ -359,13 +429,15 @@ public partial class ShellWindow
         QuietChip.Foreground = _config.Quiet ? B("Moderate") : B("TextDim");
         QuietChip.ToolTip = "Do not disturb: " + QuietLine;
         TalkChipText.Text = _talking ? "Talking" : "Talk";
+        WorkChip.Foreground = InWorkMode ? B("Core") : B("TextDim");
+        WorkChipText.Text = InWorkMode ? "Working" : "Work";
 
         var tokens = _agent?.Provider.TotalTokens ?? 0;
         TokenText.Text = tokens == 0 ? "" : tokens < 1000 ? tokens + " tok" : (tokens / 1000.0).ToString("0.0", CultureInfo.InvariantCulture) + "k tok";
 
         ModeFill.Fill = B(_config.ApprovalMode switch { "ask" => "Safe", "yolo" => "High", _ => "Moderate" });
         ModeText.Text = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(_config.ApprovalMode);
-        ModeDot.ToolTip = "Approval: " + _config.ApprovalMode + " - mouse, keyboard and screen are always asked";
+        ModeDot.ToolTip = "Approval: " + _config.ApprovalMode + " - mouse, keyboard and screen are asked once per task";
     }
 
     // ================================================================== menus
@@ -409,6 +481,7 @@ public partial class ShellWindow
             menu.Items.Add(Tray.Item("Clap three times to wake", () => Dispatcher.BeginInvoke(ToggleClaps), _config.ClapToWake));
             menu.Items.Add(Tray.Item("Answer in English", () => Dispatcher.BeginInvoke(ToggleEnglish), AnswersInEnglish));
             menu.Items.Add(Tray.Item("Talk mode", () => Dispatcher.BeginInvoke(ToggleTalk), _talking));
+            menu.Items.Add(Tray.Item("Work mode", () => Dispatcher.BeginInvoke(ToggleWork), InWorkMode));
             menu.Items.Add(Tray.Item("Do not disturb", () => Dispatcher.BeginInvoke(() => SetQuiet(!_config.Quiet)), _config.Quiet));
             menu.Items.Add(Tray.Item("Speak answers", () => Dispatcher.BeginInvoke(() => { _config.SpeakReplies = !_config.SpeakReplies; Save(); }), _config.SpeakReplies));
             menu.Items.Add(Tray.Item("Start with Windows", () =>

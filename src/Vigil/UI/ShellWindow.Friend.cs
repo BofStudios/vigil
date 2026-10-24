@@ -17,6 +17,8 @@ public partial class ShellWindow
     void WireFriend()
     {
         _checkIn = new CheckIn(_config);
+        _work = new WorkMode(_config);
+        if (_config.WorkMode) _work.Resume();
         _minute.Tick += async (_, _) => await MaybeCheckIn();
         _minute.Start();
         _checkInLife.Tick += (_, _) => HideCheckIn();
@@ -43,7 +45,13 @@ public partial class ShellWindow
             RefreshFooter();
         }
         if (_checkingIn || _checkIn is null || !_config.IsReady || _config.Quiet) return;
-        if (Busy || _approvalPending || _askPending || _yielded || _voice.State is not (Voice.VoiceState.Off or Voice.VoiceState.Idle)) return;
+        if (Busy || _approvalPending || _askPending || _voice.State is not (Voice.VoiceState.Off or Voice.VoiceState.Idle)) return;
+        if (_work?.On == true)
+        {
+            await MaybeAdvise();
+            return;
+        }
+        if (_yielded) return;
         var moment = _checkIn.Due();
         if (moment is null) return;
 
@@ -62,23 +70,105 @@ public partial class ShellWindow
 
     string _checkInMessage = "";
 
-    void ShowCheckIn(string text)
+    void ShowCheckIn(string text, bool work = false)
     {
         if (_config.Quiet) return;   // turned on while it was being written
         _checkInMessage = text;
-        if (_config.Journal) Mind.Journal("checked in", text);
-        if (_hiddenByUser)
+        if (_config.Journal) Mind.Journal(work ? "work mode" : "checked in", text);
+        // put away on purpose, or a game is full screen: a quiet note by the clock instead.
+        // Work mode was asked to interrupt, so only a full-screen game holds it back.
+        if (_yielded || (_hiddenByUser && !work))
         {
-            _tray.Tell("Vigil", text);   // put away on purpose: a quiet note by the clock instead
+            _tray.Tell("Vigil", text);
             return;
         }
         if (!IsVisible) { _tucked = false; Show(); }
+        CheckInLabel.Visibility = work ? Visibility.Visible : Visibility.Collapsed;
         CheckInText.Text = text;
         CheckInCard.Visibility = Visibility.Visible;
         CheckInCard.To(OpacityProperty, 1, 260);
         _checkInLife.Stop();
         _checkInLife.Start();
-        if (_config.SpeakCheckIns && _voice.On) _voice.Speaker.Say(text, "en");
+        if (work ? _config.EnableVoice : _config.SpeakCheckIns && _voice.On) _voice.Speaker.Say(text, "en");
+    }
+
+    // ============================================================== work mode
+    WorkMode? _work;
+
+    internal bool InWorkMode => _work?.On == true;
+
+    async Task MaybeAdvise()
+    {
+        if (_work is null || !_work.Due()) return;
+        _checkingIn = true;
+        try
+        {
+            IProvider provider;
+            try { provider = _agent?.Provider ?? ProviderFactory.Build(_config); }
+            catch (ProviderException) { return; }
+            var text = await _work.AdviseAsync(provider, CancellationToken.None);
+            if (Busy || !_work.On) return;   // something started meanwhile, or it was turned off
+            ShowCheckIn(text, work: true);
+        }
+        finally { _checkingIn = false; }
+    }
+
+    internal void ToggleWork()
+    {
+        if (InWorkMode) EndWork();
+        else _ = StartWork();
+    }
+
+    /// <summary>Asks what the work is - it makes every piece of advice sharper - then starts watching.</summary>
+    internal async Task StartWork()
+    {
+        if (InWorkMode || _work is null) return;
+        if (!_config.IsReady)
+        {
+            Summon();
+            return;
+        }
+        if (!_config.Awareness)
+        {
+            _config.Awareness = true;   // work mode is built on it: app names and minutes, nothing more
+            Toast("Work mode needs Vigil to know which app is in front (names and minutes only) - turned that on.");
+        }
+        Summon();
+        var goal = await AskOnce("Work mode. What are you working on? It makes the advice sharper.", new[] { "Skip" });
+        if (goal is null) return;   // closed without an answer
+        _work.Begin(goal.Equals("Skip", StringComparison.OrdinalIgnoreCase) ? "" : goal);
+        Save();
+        RefreshFooter();
+        if (_config.Journal) Mind.Journal("work mode", "started" + (_config.WorkGoal.Length > 0 ? ": " + _config.WorkGoal : ""));
+        var first = _config.WorkMinutes + " minutes";
+        Toast(_config.Quiet
+            ? "Work mode on - it watches, but says nothing while Do not disturb is on."
+            : "Work mode on. I'll watch how it goes and step in after " + first + ".");
+    }
+
+    internal void EndWork()
+    {
+        if (!InWorkMode || _work is null) return;
+        var summary = _work.End();
+        Save();
+        RefreshFooter();
+        if (_config.Journal) Mind.Journal("work mode", summary);
+        Toast(summary);
+    }
+
+    /// <summary>A question from Vigil itself, outside any task: the same card the agent asks with.</summary>
+    async Task<string?> AskOnce(string question, IReadOnlyList<string> choices)
+    {
+        if (_askPending) return null;
+        var answer = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ShowAsk(question, choices, answer);
+        var result = await answer.Task;
+        _askPending = false;
+        AskCard.Fade(false, 140);
+        PlaceholderText.Text = "Ask Vigil anything…";
+        PlaceholderHint.Text = "   or hold Ctrl+< and talk";
+        UpdateTray();
+        return result;
     }
 
     void HideCheckIn()

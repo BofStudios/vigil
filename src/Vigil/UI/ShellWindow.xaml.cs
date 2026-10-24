@@ -417,7 +417,8 @@ public partial class ShellWindow : Window
             // a topmost window over a game costs that game most of its frames
             _yielded = true;
             Native.GetWindowRect(foreground, out var r);
-            App.Note("stepping aside for full screen: " + Native.ClassOf(foreground) + " '" + Native.TitleOf(foreground) + "' [" + r.Left + "," + r.Top + " - " + r.Right + "," + r.Bottom + "]");
+            // the window's kind, never its title: titles carry what someone is watching or writing
+            App.Note("stepping aside for full screen: " + Native.ClassOf(foreground) + " [" + r.Left + "," + r.Top + " - " + r.Right + "," + r.Bottom + "]");
             Topmost = false;
             if (IsVisible) Hide();
         }

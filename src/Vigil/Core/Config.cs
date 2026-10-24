@@ -74,9 +74,16 @@ public sealed class Config
     public string VoiceLanguage { get; set; } = "";
     /// <summary>Read answers aloud when the question was spoken.</summary>
     public bool SpeakReplies { get; set; } = true;
-    /// <summary>auto picks the most natural voice it can reach: ElevenLabs with a key, then a neural voice
-    /// on this computer (piper), Groq, OpenAI, Windows. elevenlabs, piper, windows, groq and cloud force one.</summary>
+    /// <summary>auto picks the most natural voice it can reach: Voicebox when it is running on this computer,
+    /// ElevenLabs with a key, then a neural voice on this computer (piper), Groq, OpenAI, Windows.
+    /// voicebox, elevenlabs, piper, windows, groq and cloud force one.</summary>
     public string TtsEngine { get; set; } = "auto";
+    /// <summary>Where Voicebox answers - its own default, on this computer only.</summary>
+    public string VoiceboxUrl { get; set; } = "http://127.0.0.1:17493";
+    /// <summary>A Voicebox voice by name; empty uses the default voice set in Voicebox.</summary>
+    public string VoiceboxVoice { get; set; } = "";
+    /// <summary>While you hold Ctrl+&lt; and while Vigil speaks, other apps' sound drops to a murmur.</summary>
+    public bool DuckOthers { get; set; } = true;
     public string ElevenLabsApiKey { get; set; } = "";
     /// <summary>An ElevenLabs voice id; Daniel - British, deep, calm - by default.</summary>
     public string ElevenLabsVoice { get; set; } = "onwK4e9ZLuTAKqWW03F9";
@@ -126,6 +133,12 @@ public sealed class Config
     public int CheckInMinutes { get; set; } = 50;
     /// <summary>Say check-ins out loud as well as showing them.</summary>
     public bool SpeakCheckIns { get; set; } = false;
+    /// <summary>Work mode: Vigil watches how the work is going (app names and minutes, nothing on the screen),
+    /// and every WorkMinutes says one useful thing - drifting, scattered, or overdue a break.</summary>
+    public bool WorkMode { get; set; } = false;
+    public int WorkMinutes { get; set; } = 10;
+    /// <summary>What the person said they are working on when work mode started.</summary>
+    public string WorkGoal { get; set; } = "";
     /// <summary>Do not disturb: no check-ins, no advice, nothing said unasked. Vigil still answers when asked.</summary>
     public bool DoNotDisturb { get; set; } = false;
     /// <summary>When do-not-disturb ends by itself; null keeps it on until it is turned off.</summary>
@@ -211,6 +224,9 @@ public sealed class Config
         FollowUpSeconds = Math.Clamp(FollowUpSeconds, 0, 30);
         ClapSensitivity = Math.Clamp(ClapSensitivity, 0.4, 2.5);
         CheckInMinutes = Math.Clamp(CheckInMinutes, 10, 480);
+        WorkMinutes = Math.Clamp(WorkMinutes, 5, 120);
+        if (string.IsNullOrWhiteSpace(VoiceboxUrl) || !VoiceboxUrl.StartsWith("http://127.0.0.1") && !VoiceboxUrl.StartsWith("http://localhost"))
+            VoiceboxUrl = "http://127.0.0.1:17493";   // on this computer only: the text it is sent is what Vigil says
         if (string.IsNullOrWhiteSpace(ReplyLanguage)) ReplyLanguage = "en";
         ProtectPaths ??= new();
         if (VoiceVersion < 3)

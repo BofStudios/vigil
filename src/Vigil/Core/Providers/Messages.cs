@@ -99,6 +99,9 @@ public sealed class RateLimitException(string message, TimeSpan? retryAfter = nu
 {
     public TimeSpan RetryAfter { get; } = retryAfter ?? TimeSpan.FromSeconds(8);
 }
+/// <summary>The request on its own is more than the provider takes in a minute: waiting will not help,
+/// only a shorter one will.</summary>
+public sealed class TooLargeException(string message) : ProviderException(message);
 
 public sealed record Transcript(string Text, string Language);
 
